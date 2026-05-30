@@ -31,6 +31,13 @@ export default function Dashboard() {
               <span className="text-xl font-bold text-white">NeoNoble Ramp</span>
             </Link>
             <div className="flex items-center space-x-4">
+              <Link
+                to="/transak"
+                className="text-gray-300 hover:text-white px-3 py-2 text-sm"
+                data-testid="nav-transak-demo"
+              >
+                Transak Demo
+              </Link>
               {isDeveloper && (
                 <Link
                   to="/dev"

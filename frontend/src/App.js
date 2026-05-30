@@ -10,6 +10,7 @@ import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import DevPortal from "./pages/DevPortal";
 import DevLogin from "./pages/DevLogin";
+import TransakDemo from "./pages/TransakDemo";
 
 // Protected Route Component
 function ProtectedRoute({ children, requireDeveloper = false }) {
@@ -105,6 +106,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Transak compliance demo (auth not required — non-custodial demo flow) */}
+      <Route path="/transak" element={<TransakDemo />} />
 
       {/* Catch all - redirect to home */}
       <Route path="*" element={<Navigate to="/" replace />} />

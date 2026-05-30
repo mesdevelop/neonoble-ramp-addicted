@@ -62,6 +62,7 @@ from services.pricing_service import pricing_service
 from services.wallet_service import WalletService
 from services.blockchain_listener import BlockchainListener
 from services.stripe_payout_service import StripePayoutService
+from services.transak_service import TransakService
 
 # Import routes
 from routes.auth import router as auth_router, set_auth_service
@@ -69,6 +70,7 @@ from routes.dev_portal import router as dev_router, set_api_key_service
 from routes.ramp_api import router as ramp_api_router, set_services as set_ramp_api_services
 from routes.user_ramp import router as user_ramp_router, set_ramp_service
 from routes.webhooks import router as webhooks_router, set_payout_service as set_webhooks_payout_service
+from routes.transak import router as transak_router, set_transak_service
 
 # Initialize services
 auth_service = AuthService(db)
@@ -77,6 +79,7 @@ ramp_service = RampService(db)
 wallet_service = WalletService(db)
 blockchain_listener = BlockchainListener(db)
 payout_service = StripePayoutService(db)
+transak_service = TransakService(db)
 
 # Wire up services
 ramp_service.set_wallet_service(wallet_service)
@@ -89,6 +92,7 @@ set_api_key_service(api_key_service)
 set_ramp_api_services(ramp_service, api_key_service)
 set_ramp_service(ramp_service)
 set_webhooks_payout_service(payout_service)
+set_transak_service(transak_service)
 
 # Background task for blockchain monitoring
 blockchain_poll_task = None
@@ -149,6 +153,13 @@ async def lifespan(app: FastAPI):
         logger.info("Payout service initialized")
     except Exception as e:
         logger.warning(f"Payout service initialization failed: {e}")
+    
+    # Initialize Transak service
+    try:
+        await transak_service.initialize()
+        logger.info("Transak service initialized")
+    except Exception as e:
+        logger.warning(f"Transak service initialization failed: {e}")
     
     # Start blockchain monitoring if configured
     if os.environ.get('BSC_RPC_URL'):
@@ -223,6 +234,7 @@ api_router.include_router(dev_router)
 api_router.include_router(ramp_api_router)
 api_router.include_router(user_ramp_router)
 api_router.include_router(webhooks_router)
+api_router.include_router(transak_router)
 
 # Include the main router
 app.include_router(api_router)
