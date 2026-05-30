@@ -68,6 +68,7 @@ from routes.auth import router as auth_router, set_auth_service
 from routes.dev_portal import router as dev_router, set_api_key_service
 from routes.ramp_api import router as ramp_api_router, set_services as set_ramp_api_services
 from routes.user_ramp import router as user_ramp_router, set_ramp_service
+from routes.webhooks import router as webhooks_router, set_payout_service as set_webhooks_payout_service
 
 # Initialize services
 auth_service = AuthService(db)
@@ -87,6 +88,7 @@ set_auth_service(auth_service)
 set_api_key_service(api_key_service)
 set_ramp_api_services(ramp_service, api_key_service)
 set_ramp_service(ramp_service)
+set_webhooks_payout_service(payout_service)
 
 # Background task for blockchain monitoring
 blockchain_poll_task = None
@@ -220,6 +222,7 @@ api_router.include_router(auth_router)
 api_router.include_router(dev_router)
 api_router.include_router(ramp_api_router)
 api_router.include_router(user_ramp_router)
+api_router.include_router(webhooks_router)
 
 # Include the main router
 app.include_router(api_router)
@@ -232,3 +235,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Security headers middleware (defense-in-depth hardening)
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return response

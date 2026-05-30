@@ -5,7 +5,7 @@ import logging
 
 from models.user import User, UserCreate, UserResponse, UserRole
 from utils.password import hash_password, verify_password
-from utils.jwt_utils import create_access_token
+from utils.jwt_utils import create_access_token, create_refresh_token
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +50,12 @@ class AuthService:
             logger.error(f"Registration error: {e}")
             return None, f"Registration failed: {str(e)}"
     
-    async def login(self, email: str, password: str) -> tuple[Optional[str], Optional[str]]:
+    async def login(self, email: str, password: str) -> tuple[Optional[dict], Optional[str]]:
         """Login a user.
         
         Returns:
-            Tuple of (token, None) on success, or (None, error_message) on failure
+            Tuple of ({access_token, refresh_token, user_id, email, role}, None) on success,
+            or (None, error_message) on failure
         """
         try:
             # Find user
@@ -73,19 +74,40 @@ class AuthService:
                 logger.warning(f"Login failed: user inactive - {email}")
                 return None, "Account is deactivated"
             
-            # Create token
-            token = create_access_token(
-                user_id=user_doc['id'],
-                email=user_doc['email'],
-                role=user_doc['role']
-            )
-            
+            tokens = self._issue_tokens(user_doc)
             logger.info(f"User logged in: {email}")
-            return token, None
+            return tokens, None
             
         except Exception as e:
             logger.error(f"Login error: {e}")
             return None, f"Login failed: {str(e)}"
+
+    def _issue_tokens(self, user_doc: dict) -> dict:
+        """Issue a fresh access + refresh token pair for a user document."""
+        access_token = create_access_token(
+            user_id=user_doc['id'],
+            email=user_doc['email'],
+            role=user_doc['role'],
+        )
+        refresh_token = create_refresh_token(
+            user_id=user_doc['id'],
+            email=user_doc['email'],
+            role=user_doc['role'],
+        )
+        return {
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user_id': user_doc['id'],
+            'email': user_doc['email'],
+            'role': user_doc['role'],
+        }
+
+    async def refresh_tokens(self, user_id: str) -> Optional[dict]:
+        """Issue a new token pair for the given user_id (used by /auth/refresh)."""
+        user_doc = await self.collection.find_one({"id": user_id})
+        if not user_doc or not user_doc.get('is_active', True):
+            return None
+        return self._issue_tokens(user_doc)
     
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
         """Get user by ID."""

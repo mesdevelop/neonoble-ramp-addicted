@@ -1,7 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authApi } from '../api';
+import { authApi, tokenStore } from '../api';
 
 const AuthContext = createContext(null);
+
+const devError = (...args) => {
+  if (process.env.NODE_ENV === 'development') {
+    // eslint-disable-next-line no-console
+    console.error(...args);
+  }
+};
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -17,8 +24,7 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   const checkAuth = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    if (!tokenStore.getAccess() && !tokenStore.getRefresh()) {
       setLoading(false);
       return;
     }
@@ -27,8 +33,8 @@ export const AuthProvider = ({ children }) => {
       const userData = await authApi.getMe();
       setUser(userData);
     } catch (err) {
-      console.error('Auth check failed:', err);
-      localStorage.removeItem('token');
+      devError('Auth check failed:', err);
+      tokenStore.clear();
       setUser(null);
     } finally {
       setLoading(false);
@@ -39,13 +45,22 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, [checkAuth]);
 
-  const login = async (email, password) => {
+  const persistAuth = useCallback((response) => {
+    const access = response.access_token || response.token;
+    const refresh = response.refresh_token;
+    if (access) {
+      tokenStore.setTokens(access, refresh);
+      setUser(response.user);
+      return true;
+    }
+    return false;
+  }, []);
+
+  const login = useCallback(async (email, password) => {
     setError(null);
     try {
       const response = await authApi.login(email, password);
-      if (response.success && response.token) {
-        localStorage.setItem('token', response.token);
-        setUser(response.user);
+      if (response.success && persistAuth(response)) {
         return { success: true };
       }
       throw new Error(response.message || 'Login failed');
@@ -54,15 +69,13 @@ export const AuthProvider = ({ children }) => {
       setError(message);
       return { success: false, error: message };
     }
-  };
+  }, [persistAuth]);
 
-  const register = async (email, password, role = 'USER') => {
+  const register = useCallback(async (email, password, role = 'USER') => {
     setError(null);
     try {
       const response = await authApi.register(email, password, role);
-      if (response.success && response.token) {
-        localStorage.setItem('token', response.token);
-        setUser(response.user);
+      if (response.success && persistAuth(response)) {
         return { success: true };
       }
       throw new Error(response.message || 'Registration failed');
@@ -71,12 +84,12 @@ export const AuthProvider = ({ children }) => {
       setError(message);
       return { success: false, error: message };
     }
-  };
+  }, [persistAuth]);
 
-  const logout = () => {
-    localStorage.removeItem('token');
+  const logout = useCallback(() => {
+    tokenStore.clear();
     setUser(null);
-  };
+  }, []);
 
   const value = {
     user,
