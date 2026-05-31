@@ -7,6 +7,7 @@ import { transakApi } from '../api/transak';
 import { ComplianceBanner } from '../components/transak/ComplianceBanner';
 import { WalletConnect } from '../components/transak/WalletConnect';
 import { TransakLauncher } from '../components/transak/TransakLauncher';
+import { PancakeSwapPanel } from '../components/transak/PancakeSwapPanel';
 
 const devError = (...args) => {
   if (process.env.NODE_ENV === 'development') {
@@ -123,6 +124,14 @@ export default function TransakDemo() {
             walletAddress={wallet.address}
             isBSC={wallet.isBSC}
             onEvent={handleEvent}
+          />
+        )}
+
+        {config && (
+          <PancakeSwapPanel
+            walletAddress={wallet.address}
+            isBSC={wallet.isBSC}
+            nenoContract={config.neno_contract}
           />
         )}
 

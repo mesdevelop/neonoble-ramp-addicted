@@ -7,6 +7,9 @@ All endpoints are intentionally observational:
                                        own session (NOT a trade trigger)
   GET  /api/transak/events         -> read back the caller's events for
                                        the connected wallet
+  POST /api/transak/webhook        -> server-to-server event hook from
+                                       Transak with HMAC-SHA256 signature
+                                       verification
 
 There is NO endpoint that creates, routes, or settles a trade — the
 Transak widget runs in the user's browser and settles directly to the
@@ -14,10 +17,13 @@ user's wallet. This is what "non-custodial + no fund intermediation"
 means at the API layer.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import hmac
+import hashlib
+import os
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict, List
-import logging
 
 from middleware.auth import get_optional_user
 from services.transak_service import TransakService
@@ -89,3 +95,84 @@ async def list_events(
     if not transak_service:
         raise HTTPException(status_code=503, detail="Transak service not ready")
     return await transak_service.list_events_for_wallet(wallet_address, limit=limit)
+
+
+def _verify_transak_signature(raw_body: bytes, signature_header: str) -> bool:
+    """Verify the HMAC-SHA256 signature Transak sends with each webhook.
+    Header format (Transak): 'sha256=<hex>' or the raw hex value.
+    Secret is the TRANSAK_API_SECRET issued in the partner dashboard.
+    """
+    secret = os.environ.get("TRANSAK_API_SECRET", "").strip()
+    if not secret:
+        logger.warning("TRANSAK_API_SECRET not set — webhook signature cannot be verified")
+        return False
+    if not signature_header:
+        return False
+    received = signature_header.strip()
+    if received.lower().startswith("sha256="):
+        received = received.split("=", 1)[1]
+    expected = hmac.new(
+        secret.encode("utf-8"),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(received.lower(), expected.lower())
+
+
+@router.post("/webhook")
+async def transak_webhook(request: Request):
+    """Server-to-server event hook from Transak.
+
+    - Verifies the HMAC-SHA256 signature using TRANSAK_API_SECRET.
+    - Persists the (verified) event for audit.
+    - Returns 200 even on signature failure to avoid leaking which
+      requests come from Transak vs. probes — but logs the rejection.
+    """
+    if not transak_service:
+        raise HTTPException(status_code=503, detail="Transak service not ready")
+
+    raw = await request.body()
+    signature = (
+        request.headers.get("x-signature")
+        or request.headers.get("transak-signature")
+        or request.headers.get("x-transak-signature")
+        or ""
+    )
+    verified = _verify_transak_signature(raw, signature)
+
+    try:
+        import json
+        payload = json.loads(raw.decode("utf-8")) if raw else {}
+    except Exception:
+        payload = {"_raw": raw.decode("utf-8", errors="ignore")}
+
+    event_type = payload.get("eventID") or payload.get("event_id") or "TRANSAK_WEBHOOK"
+    data = payload.get("webhookData") or payload.get("data") or payload
+    wallet_address = ""
+    if isinstance(data, dict):
+        wallet_address = (
+            data.get("walletAddress")
+            or data.get("wallet_address")
+            or data.get("customerWalletAddress")
+            or ""
+        )
+
+    enriched_payload = {
+        **payload,
+        "_verified": verified,
+        "_source": "webhook",
+    }
+    await transak_service.record_event(
+        wallet_address=wallet_address,
+        event_type=event_type,
+        payload=enriched_payload,
+        user_id=None,
+    )
+    if not verified:
+        logger.warning(
+            f"Transak webhook signature verification FAILED for event {event_type}"
+        )
+        # We still return 200 to avoid acknowledging the probe.
+    else:
+        logger.info(f"Transak webhook verified: {event_type}")
+    return {"received": True, "verified": verified}

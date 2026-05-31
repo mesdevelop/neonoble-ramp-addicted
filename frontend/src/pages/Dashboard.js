@@ -68,6 +68,30 @@ export default function Dashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4" data-testid="enterprise-otc-banner">
+          <div className="flex items-start gap-3">
+            <span className="inline-block bg-amber-500/30 text-amber-100 text-xs px-2 py-0.5 rounded font-semibold mt-0.5">
+              ENTERPRISE OTC
+            </span>
+            <div className="flex-1 text-sm text-amber-100/90">
+              <p>
+                This dashboard is the <strong>direct NeoNoble OTC desk</strong>: NENO at the fixed{' '}
+                <span className="font-mono">€10,000</span> price, settled by NeoNoble via Stripe SEPA.
+                It's the right channel for bilateral enterprise deals and is operated under
+                NeoNoble's own compliance regime.
+              </p>
+              <p className="mt-2">
+                For the retail, non-custodial flow at <em>market price</em> (USDC/USDT/ETH/BTC and,
+                once whitelisted, NENO) use the{' '}
+                <Link to="/transak" className="text-purple-300 underline hover:text-purple-200">
+                  Transak ramp
+                </Link>{' '}
+                instead — same wallet, different rails.
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
             <RampPanel onTransactionExecuted={refreshTransactions} />
