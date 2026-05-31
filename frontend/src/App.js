@@ -14,6 +14,7 @@ import TransakDemo from "./pages/TransakDemo";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import ChangePassword from "./pages/ChangePassword";
+import Admin from "./pages/Admin";
 
 // Protected Route Component
 function ProtectedRoute({ children, requireDeveloper = false }) {
@@ -124,6 +125,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* CASP Admin Console */}
+      <Route path="/admin/*" element={<Admin />} />
 
       {/* Catch all - redirect to home */}
       <Route path="*" element={<Navigate to="/" replace />} />

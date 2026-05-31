@@ -179,4 +179,62 @@ export const healthApi = {
   },
 };
 
+// CASP Admin Console API
+export const caspApi = {
+  // Dashboard
+  dashboard: async () => (await api.get('/casp/dashboard')).data,
+  // Block 1
+  listKyc: async (status) => (await api.get('/casp/kyc', { params: { status } })).data,
+  decideKyc: async (kycId, decision, reason) =>
+    (await api.post(`/casp/kyc/${kycId}/decision`, { decision, reason })).data,
+  listKyb: async () => (await api.get('/casp/kyb')).data,
+  listRisk: async () => (await api.get('/casp/risk-rating')).data,
+  upsertRisk: async (body) => (await api.post('/casp/risk-rating', body)).data,
+  listSanctions: async () => (await api.get('/casp/sanctions')).data,
+  // Block 2
+  listAml: async (status, severity) =>
+    (await api.get('/casp/aml/alerts', { params: { status, severity } })).data,
+  screenAddress: async (body) => (await api.post('/casp/aml/screen-address', body)).data,
+  resolveAml: async (id, status, notes) =>
+    (await api.post(`/casp/aml/alerts/${id}/resolve`, { status, notes })).data,
+  listTravelRule: async (direction) =>
+    (await api.get('/casp/travel-rule', { params: { direction } })).data,
+  createTravelRule: async (body) => (await api.post('/casp/travel-rule', body)).data,
+  listSar: async () => (await api.get('/casp/sar')).data,
+  draftSar: async (body) => (await api.post('/casp/sar', body)).data,
+  // Block 3
+  listWallets: async (kind, purpose) =>
+    (await api.get('/casp/wallets', { params: { kind, purpose } })).data,
+  provisionWallet: async (body) => (await api.post('/casp/wallets/provision', body)).data,
+  freezeWallet: async (id) => (await api.post(`/casp/wallets/${id}/freeze`)).data,
+  reconcileWallet: async (id) => (await api.post(`/casp/wallets/${id}/reconcile`)).data,
+  latestPor: async () => (await api.get('/casp/proof-of-reserves')).data,
+  generatePor: async () => (await api.post('/casp/proof-of-reserves/generate')).data,
+  // Block 4
+  listOtc: async (status) => (await api.get('/casp/otc', { params: { status } })).data,
+  createOtc: async (body) => (await api.post('/casp/otc/quote', body)).data,
+  approveOtc: async (id, decision, notes) =>
+    (await api.post(`/casp/otc/${id}/approve`, { decision, notes })).data,
+  executeOtc: async (id) => (await api.post(`/casp/otc/${id}/execute`)).data,
+  // Block 5
+  listReports: async () => (await api.get('/casp/reports')).data,
+  generateMicar: async (body) => (await api.post('/casp/reports/micar', body)).data,
+  upsertCapital: async (body) => (await api.post('/casp/capital', body)).data,
+  // Block 6
+  listComplaints: async (status) =>
+    (await api.get('/casp/complaints', { params: { status } })).data,
+  createComplaint: async (body) => (await api.post('/casp/complaints', body)).data,
+  listDisclosures: async () => (await api.get('/casp/disclosures')).data,
+  // Block 7
+  listAdmins: async () => (await api.get('/casp/governance/admins')).data,
+  addAdmin: async (body) => (await api.post('/casp/governance/admins', body)).data,
+  listIncidents: async (status) =>
+    (await api.get('/casp/governance/incidents', { params: { status } })).data,
+  listConflicts: async () => (await api.get('/casp/governance/conflicts')).data,
+  // Audit
+  listAudit: async (limit = 100, entityId) =>
+    (await api.get('/casp/audit', { params: { limit, entity_id: entityId } })).data,
+  verifyAudit: async () => (await api.get('/casp/audit/verify')).data,
+};
+
 export default api;
