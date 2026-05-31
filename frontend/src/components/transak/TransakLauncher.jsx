@@ -22,6 +22,14 @@ const TRACKED_EVENT_PREFIX = 'TRANSAK_';
 const buildWidgetUrl = (config, walletAddress, productsAvailed, token) => {
   const base =
     config.environment === 'PRODUCTION' ? PROD_WIDGET_BASE : STG_WIDGET_BASE;
+  // Always send the LIVE referrer the browser is actually on, not what's
+  // baked into backend .env. This keeps preview / production / localhost
+  // consistent without redeploys. Transak rejects sessions when the
+  // Origin header and the referrerDomain query param disagree.
+  const liveReferrer =
+    typeof window !== 'undefined' && window.location?.host
+      ? window.location.host
+      : config.referrer_domain || '';
   const params = new URLSearchParams({
     apiKey: config.api_key,
     environment: config.environment || 'STAGING',
@@ -33,7 +41,7 @@ const buildWidgetUrl = (config, walletAddress, productsAvailed, token) => {
     hideMenu: 'true',
     themeColor: '7c3aed',
     defaultFiatCurrency: config.fiat_currency || 'EUR',
-    referrerDomain: config.referrer_domain || window.location.host,
+    referrerDomain: liveReferrer,
     partnerCustomerId: walletAddress,
   });
   return `${base}?${params.toString()}`;
@@ -260,6 +268,34 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
           <span className="text-gray-500">@ {new Date(lastEvent.at).toLocaleTimeString()}</span>
         </div>
       )}
+
+      <details className="mt-3 text-xs text-gray-400" data-testid="referrer-diagnostic">
+        <summary className="cursor-pointer hover:text-gray-300">
+          Referrer diagnostic (use this if Transak rejects the session)
+        </summary>
+        <div className="mt-2 rounded-lg bg-black/30 p-3 space-y-1 font-mono text-[11px]">
+          <p>
+            referrerDomain sent:{' '}
+            <span className="text-purple-200">
+              {typeof window !== 'undefined' ? window.location.host : '(unknown)'}
+            </span>
+          </p>
+          <p>
+            apiKey prefix:{' '}
+            <span className="text-purple-200">
+              {(config?.api_key || '').slice(0, 8)}…
+            </span>
+          </p>
+          <p>
+            environment: <span className="text-purple-200">{config?.environment}</span>
+          </p>
+          <p className="text-gray-500 mt-2">
+            If the popup shows "Something went wrong", confirm this exact{' '}
+            <strong>referrerDomain</strong> is whitelisted under{' '}
+            <em>Transak Partner Dashboard → Settings → Allowed Domains</em>.
+          </p>
+        </div>
+      </details>
     </div>
   );
 };

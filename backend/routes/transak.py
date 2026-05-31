@@ -52,6 +52,26 @@ class TransakEventResponse(BaseModel):
     event_id: str
 
 
+class CreateWidgetUrlRequest(BaseModel):
+    productsAvailed: Optional[str] = None
+    cryptoCurrencyCode: Optional[str] = None
+    network: Optional[str] = None
+    walletAddress: Optional[str] = None
+    disableWalletAddressForm: Optional[str] = None
+    hideMenu: Optional[str] = None
+    themeColor: Optional[str] = None
+    defaultFiatCurrency: Optional[str] = None
+    partnerCustomerId: Optional[str] = None
+    fiatCurrency: Optional[str] = None
+    referrerDomain: Optional[str] = None
+
+
+class CreateWidgetUrlResponse(BaseModel):
+    widget_url: str
+    referrer_domain_sent: str
+    expires_in_seconds: int
+
+
 @router.get("/config")
 async def get_config():
     """Return the public, read-only Transak widget config."""
@@ -64,6 +84,31 @@ async def get_config():
             detail="TRANSAK_API_KEY not configured on backend",
         )
     return config
+
+
+@router.post("/widget-url", response_model=CreateWidgetUrlResponse)
+async def create_widget_url(request: CreateWidgetUrlRequest):
+    """Create a single-use Transak widget URL with embedded session token.
+
+    The backend calls Transak's /partners/api/v2/refresh-token (using
+    TRANSAK_API_SECRET) to obtain a partner access token, then calls
+    /api/v2/auth/session with the requested widgetParams to obtain the
+    final widgetUrl. The frontend opens that URL in a popup.
+
+    apiKey + referrerDomain are server-controlled — the frontend can pass
+    a hint but the backend enforces the canonical values from env / config.
+    """
+    if not transak_service:
+        raise HTTPException(status_code=503, detail="Transak service not ready")
+    params = {k: v for k, v in request.model_dump().items() if v is not None}
+    try:
+        result = await transak_service.create_widget_url(params)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to create Transak widget URL")
+        raise HTTPException(status_code=500, detail=f"Internal error: {e}")
+    return CreateWidgetUrlResponse(**result)
 
 
 @router.post("/events", response_model=TransakEventResponse)

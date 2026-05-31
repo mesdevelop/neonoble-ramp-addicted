@@ -22,7 +22,9 @@ Compliance pillars enforced at this layer:
 """
 
 import os
+import time
 import logging
+import httpx
 from datetime import datetime, timezone
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -31,6 +33,15 @@ logger = logging.getLogger(__name__)
 
 # NENO BEP-20 contract (mainnet). Same value used by the blockchain listener.
 NENO_CONTRACT_ADDRESS = "0xeF3F5C1892A8d7A3304E4A15959E124402d69974"
+
+# Transak partner-API endpoints
+TRANSAK_API_STG = "https://api-stg.transak.com"
+TRANSAK_API_PROD = "https://api.transak.com"
+TRANSAK_GATEWAY_STG = "https://api-gateway-stg.transak.com"
+TRANSAK_GATEWAY_PROD = "https://api-gateway.transak.com"
+
+# Refresh ~24h before expiry to avoid edge-of-window failures
+ACCESS_TOKEN_REFRESH_BUFFER_SECONDS = 24 * 60 * 60
 
 # Transak does NOT list NENO in its supported assets on staging today.
 # Until Transak adds the NENO listing, the widget will fall back to USDC
@@ -43,6 +54,112 @@ class TransakService:
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
         self.events_collection = db.transak_events
+        # Cached partner access token (JWT) — refreshed before expiry
+        self._access_token: Optional[str] = None
+        self._access_token_expires_at: int = 0
+
+    def _is_production(self) -> bool:
+        return os.environ.get("TRANSAK_ENVIRONMENT", "STAGING").upper() == "PRODUCTION"
+
+    def _api_base(self) -> str:
+        return TRANSAK_API_PROD if self._is_production() else TRANSAK_API_STG
+
+    def _gateway_base(self) -> str:
+        return TRANSAK_GATEWAY_PROD if self._is_production() else TRANSAK_GATEWAY_STG
+
+    async def _ensure_access_token(self) -> str:
+        """Return a valid Transak Partner Access Token, refreshing if needed."""
+        now = int(time.time())
+        if self._access_token and self._access_token_expires_at - now > ACCESS_TOKEN_REFRESH_BUFFER_SECONDS:
+            return self._access_token
+
+        api_key = os.environ.get("TRANSAK_API_KEY", "").strip()
+        api_secret = os.environ.get("TRANSAK_API_SECRET", "").strip()
+        if not api_key or not api_secret:
+            raise RuntimeError("TRANSAK_API_KEY / TRANSAK_API_SECRET not configured")
+
+        url = f"{self._api_base()}/partners/api/v2/refresh-token"
+        headers = {
+            "accept": "application/json",
+            "api-secret": api_secret,
+            "content-type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(url, headers=headers, json={"apiKey": api_key})
+            if r.status_code >= 400:
+                logger.error(f"Transak refresh-token failed ({r.status_code}): {r.text[:300]}")
+                r.raise_for_status()
+            payload = r.json()
+
+        token = (payload.get("data") or {}).get("accessToken")
+        expires_at = (payload.get("data") or {}).get("expiresAt", 0)
+        if not token:
+            raise RuntimeError(f"Transak refresh-token returned no accessToken: {payload}")
+        self._access_token = token
+        self._access_token_expires_at = int(expires_at)
+        logger.info(
+            f"Transak partner access token refreshed (expires {datetime.fromtimestamp(self._access_token_expires_at, tz=timezone.utc).isoformat()})"
+        )
+        return token
+
+    async def create_widget_url(self, widget_params: dict) -> dict:
+        """Create a session-bound widgetUrl for the Transak widget.
+
+        widget_params is a dict of Transak query parameters. apiKey and
+        referrerDomain are injected by the backend (frontend cannot override
+        them — anti-tamper).
+        """
+        access_token = await self._ensure_access_token()
+        api_key = os.environ.get("TRANSAK_API_KEY", "").strip()
+        # The frontend already auto-detects window.location.host, but we still
+        # accept it as a parameter so the backend has the authoritative value
+        # of what we sent to Transak (for audit + diagnostics).
+        referrer_domain = (widget_params.get("referrerDomain") or "").strip()
+        if not referrer_domain:
+            referrer_domain = os.environ.get("TRANSAK_REFERRER_DOMAIN", "").strip()
+        if not referrer_domain:
+            raise RuntimeError("referrerDomain is required (env TRANSAK_REFERRER_DOMAIN or request body)")
+
+        # Enforce server-controlled values
+        enforced = dict(widget_params)
+        enforced["apiKey"] = api_key
+        enforced["referrerDomain"] = referrer_domain
+
+        url = f"{self._gateway_base()}/api/v2/auth/session"
+        headers = {
+            "access-token": access_token,
+            "content-type": "application/json",
+            "accept": "application/json",
+        }
+        body = {"widgetParams": enforced}
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(url, headers=headers, json=body)
+            if r.status_code >= 400:
+                logger.error(
+                    f"Transak create-widget-url failed ({r.status_code}): {r.text[:500]}"
+                )
+                # Bubble up Transak's error for the UI
+                try:
+                    err = r.json()
+                except Exception:
+                    err = {"raw": r.text}
+                raise RuntimeError(
+                    f"Transak rejected widget session (HTTP {r.status_code}): {err}"
+                )
+            payload = r.json()
+
+        widget_url = (payload.get("data") or {}).get("widgetUrl")
+        if not widget_url:
+            raise RuntimeError(f"Transak returned no widgetUrl: {payload}")
+        logger.info(
+            f"Transak widget URL created for referrer={referrer_domain} "
+            f"crypto={enforced.get('cryptoCurrencyCode')}/{enforced.get('network')}"
+        )
+        return {
+            "widget_url": widget_url,
+            "referrer_domain_sent": referrer_domain,
+            "expires_in_seconds": 300,  # per docs
+        }
 
     async def initialize(self):
         await self.events_collection.create_index("wallet_address")
