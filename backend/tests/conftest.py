@@ -3,6 +3,10 @@ import os
 import uuid
 import pytest
 import requests
+from dotenv import load_dotenv
+
+# Make backend env vars available to tests that need DB lookups (MONGO_URL, DB_NAME, JWT_SECRET).
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')

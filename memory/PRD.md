@@ -1,6 +1,6 @@
 # NeoNoble Ramp — Product Requirements Document
 
-_Living document. Last updated: 2026-02_
+_Living document. Last updated: 2026-02 (iter_4)_
 
 ## Original Problem Statement
 
@@ -9,132 +9,158 @@ Build a full-stack on/off-ramp platform for the **NeoNoble Ramp** product
 
 - User authentication (email/password, JWT) for both the public Ramp app
   and a Dev Portal.
-- Platform API key management with AES-256-GCM encryption and
-  HMAC-SHA256 request signing.
-- Public Ramp API endpoints (on-ramp / off-ramp quotes and execution).
-- Real-time crypto pricing via CoinGecko, with NENO token fixed at €10,000.
-- 60-minute quote TTL with locking to prevent double-spend.
-- Real BSC blockchain integration: per-quote BEP-20 deposit address,
-  on-chain transfer detection, automatic Stripe SEPA payout.
-- **Compliance: Transak Widget STAGING integration for the UK compliance
-  walkthrough video.** Three pillars must be visibly enforced:
-  *User-initiated Only*, *No Fund Intermediation*, *Direct Delivery*.
+- Platform API key management (AES-256-GCM + HMAC-SHA256).
+- Public Ramp API (on/off-ramp quotes + execution).
+- Real-time pricing via CoinGecko, NENO token fixed at €10,000.
+- 60-minute quote TTL with locking.
+- Real BSC blockchain integration (per-quote BEP-20 deposit address +
+  on-chain detection + Stripe SEPA payout).
+- **Transak Widget STAGING integration** for UK compliance video.
+- **PancakeSwap V2 on-chain swap** for the custom NENO token.
 
 ## Architecture (current)
 
-- **Frontend**: React + Tailwind, axios with silent-refresh interceptor.
-  Small, single-responsibility components + custom hooks.
-- **Backend**: FastAPI + Motor (async MongoDB).
-- **Auth**: JWT bearer — 15 min access + 7 day refresh in `localStorage`
-  (`SECURITY.md` documents the planned `HttpOnly` cookie migration).
-- **Blockchain**: web3.py polling on BSC; per-quote deposit address via
-  BIP44 HD wallet derivation.
-- **Payouts (NeoNoble Ramp internal flow)**: Stripe (live mode), webhook
-  mounted at `/api/webhooks/stripe`. Live key still to be configured.
-- **Transak (compliance demo flow)**: `@transak/ui-js-sdk` v2 against
-  `global-stg.transak.com`. Strictly non-custodial: the user connects
-  their own injected wallet, the address is passed verbatim to Transak
-  with `disableWalletAddressForm=true`, the backend has **no**
-  trade-creation endpoint (only `GET /config` and `POST /events`).
+- **Frontend**: React + Tailwind. Silent-refresh axios. Custom hooks +
+  small components. Ethers v6 for on-chain calls.
+- **Backend**: FastAPI + Motor (async MongoDB). Resend for email.
+- **Auth**: JWT — 15 min access + 7 day refresh in `localStorage`.
+  Case-insensitive email throughout. Single-use password reset via JWT
+  with persisted `jti` on user doc. Welcome + reset emails via Resend
+  with console-fallback. See `SECURITY.md`.
+- **Blockchain**: web3.py polling on BSC (server-side, NeoNoble internal
+  flow). On-chain swap via ethers + window.ethereum (client-side,
+  PancakeSwap flow).
+- **Stripe**: webhook mounted at `/api/webhooks/stripe`. Live keys
+  pending.
+- **Transak**: `@transak/ui-js-sdk` v2 against `global-stg.transak.com`.
+  Partner staging key configured. Server-to-server webhook with
+  HMAC-SHA256 verification at `/api/transak/webhook`.
 
 ## Implemented (✅)
 
-- Full auth flow (register/login/`/me`/logout) ………………… DONE
-- Short-lived access token + refresh + `/auth/refresh` ……… DONE (2026-02)
-- Security response headers middleware ………………………………… DONE (2026-02)
-- Silent refresh axios interceptor ……………………………………… DONE (2026-02)
-- `/api/webhooks/stripe` route registered ………………………… DONE (2026-02)
-- **Transak STAGING integration** ………………………………………… DONE (2026-02)
-  - `/api/transak/config`, `/api/transak/events` (log + readback)
-  - `useWallet` hook (window.ethereum, BSC chain-switch)
-  - `WalletConnect`, `ComplianceBanner`, `TransakLauncher` components
-  - Public `/transak` page with three pillar cards, three CTA buttons,
-    event stream + collapsed config JSON for the video
-  - USDC-on-BSC fallback until Transak whitelists NENO
-  - `TRANSAK_DEMO_WALKTHROUGH.md` 45–90s video script
-- Dev Portal: API key create / reveal / revoke ………………… DONE
-- HMAC middleware on Ramp APIs ………………………………………… DONE
-- CoinGecko real-time pricing + NENO fixed at €10,000 ………… DONE
-- 60-minute quote TTL + quote-lock ……………………………………… DONE
-- HD-wallet BSC deposit address generation ………………………… DONE
-- Blockchain listener wired into app lifespan ……………………… DONE
-- Stripe payout service (live mode, no simulated fallback) … DONE (awaiting key)
-- Code-review fixes (2026-02): hook deps, `console.error` dev-only,
-  `create_payout` split into 4 helpers, `Dashboard.js` / `DevPortal.js`
-  reduced to thin orchestrators with extracted hooks + sub-components
+### Iteration 1 (auth hardening)
+- 15-min access + 7-day refresh + `/auth/refresh` rotation
+- Silent refresh interceptor
+- Security response headers middleware
+- `/api/webhooks/stripe` registered
+
+### Iteration 2 (Transak STAGING base)
+- `useWallet`, `WalletConnect`, `ComplianceBanner`, `TransakLauncher`
+- Public `/transak` page (3 pillars + 3 CTAs + event stream)
+- `TRANSAK_DEMO_WALKTHROUGH.md` + `_IT.md`
+
+### Iteration 3 (P0 case-sensitivity + password flows)
+- **P0 bug fix**: email case-insensitivity (`_normalize_email`) + null
+  guard in register auto-login. Migration script normalised 63 users.
+- `/forgot-password`, `/reset-password`, `/change-password` endpoints + pages
+- Welcome email on register
+- Resend integration with console fallback when no API key
+- 24h reset token TTL, single-use via persisted `jti`
+- `AuthShell` component, login `Forgot your password?` link,
+  dashboard `Change Password` nav
+
+### Iteration 4 (current — Transak partner key + PancakeSwap + Enterprise OTC)
+- **Transak partner staging key** wired in `.env`; API secret kept
+  server-side for webhook verification
+- **Transak server-to-server webhook** `POST /api/transak/webhook` with
+  HMAC-SHA256 verification accepting `x-signature`, `transak-signature`,
+  or `x-transak-signature` headers (both `sha256=<hex>` and raw hex
+  formats). Always returns 200 to avoid probe enumeration; logs verified
+  flag on persisted event.
+- **8-token catalogue** quick-pick on `/transak` (USDC/USDT/BNB on BSC,
+  ETH and USDC on Ethereum, USDC and MATIC on Polygon, BTC on Bitcoin),
+  with a clear "Add Custom Token" hint pointing to the Transak Partner
+  Dashboard for NENO and other unlisted tokens.
+- **PancakeSwap V2 on-chain swap** UI at the bottom of `/transak`:
+  USDC ↔ NENO, debounced quote via `getAmountsOut`, slippage presets
+  (0.5%/1%/3%), allowance handling, balance pre-check, BscScan tx link.
+  Fully non-custodial — every tx is signed by user's wallet.
+- **Enterprise OTC banner** on internal `/dashboard` separating the
+  NeoNoble fixed-price OTC desk from the non-custodial Transak ramp.
+- Resend API key configured (welcome + reset emails go out live).
+- `TRANSAK_SUPPORTS_NENO=false` flag — flip to `true` after Transak's
+  Asset Listing approval, and NENO appears automatically in the picker.
 
 ## Backlog
 
-### P0 — Pending live integration credentials
-- 🎬 **Record the Transak walkthrough video** from
-  `${REACT_APP_BACKEND_URL}/transak` using a disposable MetaMask wallet.
-  Script: `/app/TRANSAK_DEMO_WALKTHROUGH.md`. ETA after MetaMask install:
-  ~5 min.
-- 🔑 Add live `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-  `STRIPE_PAYOUT_IBAN`, `STRIPE_PAYOUT_BENEFICIARY_NAME` to backend
-  `.env` and run a real end-to-end payout (was deferred from previous session).
+### P0 — Pending external action
+- 🌐 **Verify `neonoble-ramp.com` on Resend** (5 min) → unlock email
+  delivery to arbitrary recipients (not just verified ones).
+- 🆔 **Submit NENO Asset Listing request** to Transak Partner Dashboard
+  with contract `0xeF3F5C1892A8d7A3304E4A15959E124402d69974`. Expected
+  2–7 days for staging approval.
+- 🎬 **Record the Transak compliance video** using `/transak` +
+  `TRANSAK_DEMO_WALKTHROUGH_IT.md`.
+- 🔑 Live Stripe keys (carried over from earlier sprint).
 
-### P1 — Scheduled refactors
-- 🍪 **HttpOnly cookie auth migration** (Option A) — scheduled for the
-  next sprint, after compliance video. See `SECURITY.md`.
-- Refactor `execute_offramp` / `execute_onramp` / `process_deposit_received`
+### P1 — Scheduled
+- 🍪 HttpOnly cookie auth migration (Option A) — next sprint.
+- 🏊 **Provide initial liquidity** to a NENO/USDC PancakeSwap V2 pool on
+  BSC mainnet so the swap UI returns actual quotes (currently fails
+  gracefully with "No liquidity pool found").
+- 🔨 Refactor `execute_offramp`/`execute_onramp`/`process_deposit_received`
   in `services/ramp_service.py`.
-- Flip `TRANSAK_SUPPORTS_NENO=true` the moment Transak whitelists
-  `0xeF3F5C1892A8d7A3304E4A15959E124402d69974` on staging.
 
 ### P2 — Nice-to-haves
-- Admin endpoint to list/sync payouts.
-- After signup with DEVELOPER role → land on `/dev` instead of `/dashboard`.
-- Tighten `CORS_ORIGINS` from `*` to an allow-list (paired with the
-  cookie migration).
-- Transak webhook receiver (server-to-server order updates) to
-  complement the client-side event log.
+- Move Transak token catalogue to `.env` JSON (no redeploy)
+- Admin endpoint listing all Transak webhook events
+- Transak order-status push from webhook into user's notification panel
+- 2FA TOTP for DEVELOPER role
 
-## Tech-stack Notes
-
-- Originally requested PostgreSQL + Prisma; **MongoDB + Motor** chosen
-  due to environment constraints — user accepted.
-- All authenticated routes use the `/api` prefix; bare-domain `/health`
-  for Kubernetes liveness checks.
-- Transak SDK: `@transak/ui-js-sdk` v2 (NOT the older `@transak/transak-sdk`).
-  Widget initialized via `widgetUrl` query-string composition.
-
-## Compliance pillar enforcement (Transak)
-
-| Pillar | Where it's enforced |
-|---|---|
-| User-initiated Only | Buy/Sell/Swap buttons disabled until `wallet.address` is set. No backend endpoint creates a trade. |
-| No Fund Intermediation | `/api/transak` only exposes `GET /config` and `POST /events`. No transfer/payout/order endpoint. Verified via 10 forbidden-path 404 probes in `tests/test_transak.py`. |
-| Direct Delivery | Widget URL built with `walletAddress=<user_addr>` + `disableWalletAddressForm=true`. The address shown in the green "Wallet connected" card is the same one Transak receives. |
-
-## Files of Reference (current)
+## Files of Reference
 
 ```
 /app/
 ├── backend/
 │   ├── routes/        (auth, dev_portal, ramp_api, user_ramp, webhooks, transak)
 │   ├── services/      (auth, api_key, ramp, pricing, wallet, blockchain_listener,
-│   │                   stripe_payout, transak)
-│   ├── utils/         (encryption, jwt_utils, password)
-│   ├── tests/         (test_backend.py, test_transak.py, conftest.py)
+│   │                   stripe_payout, transak, email)
+│   ├── utils/         (encryption, jwt_utils [+password_reset], password)
+│   ├── tests/         (test_backend.py, test_transak.py, test_password_flows.py,
+│   │                   conftest.py — 48 pytest tests, 1 expected skip)
+│   ├── scripts/       (normalise_user_emails.py — idempotent, already ran)
 │   └── server.py
 ├── frontend/
 │   └── src/
-│       ├── api/                 (index.js, transak.js)
+│       ├── api/                 (index.js with silent refresh, transak.js)
 │       ├── context/             (AuthContext.js)
 │       ├── hooks/               (usePricing, useTransactions, useApiKeys,
 │       │                         useWallet, use-toast)
+│       ├── lib/                 (pancakeswap.js — ethers v6 swap helpers)
 │       ├── components/
+│       │   ├── auth/            (AuthShell)
 │       │   ├── dashboard/       (PriceDisplay, TransactionList, RampPanel, …)
 │       │   ├── devportal/       (StatsBar, CreateKeyForm, CreatedKeyModal, …)
-│       │   └── transak/         (ComplianceBanner, WalletConnect, TransakLauncher)
+│       │   └── transak/         (ComplianceBanner, WalletConnect,
+│       │                         TransakLauncher, PancakeSwapPanel)
 │       └── pages/               (Home, Login, Signup, Dashboard, DevLogin,
-│                                 DevPortal, TransakDemo)
+│                                 DevPortal, TransakDemo, ForgotPassword,
+│                                 ResetPassword, ChangePassword)
 ├── memory/PRD.md
 ├── memory/test_credentials.md
 ├── SECURITY.md
-├── TRANSAK_DEMO_WALKTHROUGH.md   # 45-90s video script
+├── TRANSAK_DEMO_WALKTHROUGH.md  + _IT.md
 └── test_reports/
-    ├── iteration_1.json   # auth-hardening + refactor — 22/22 pass
-    └── iteration_2.json   # Transak STAGING — 29/29 pass
+    ├── iteration_1.json   # 22/22 auth hardening
+    ├── iteration_2.json   # 29/29 Transak STAGING
+    ├── iteration_3.json   # 43/43 + 8/8 case-sensitivity + password reset
+    └── iteration_4.json   # 48/48 webhook HMAC + PancakeSwap + Enterprise OTC
 ```
+
+## Compliance pillar enforcement (Transak)
+
+| Pillar | Where it's enforced |
+|---|---|
+| User-initiated Only | Buy/Sell/Swap buttons + PancakeSwap UI disabled until `wallet.address` is set. No backend endpoint creates a trade. |
+| No Fund Intermediation | `/api/transak` only `GET /config` + `POST /events` + signed-only `POST /webhook`. No transfer/payout/order endpoint. |
+| Direct Delivery | Widget URL built with `walletAddress=<user_addr>` + `disableWalletAddressForm=true`. PancakeSwap router invoked directly from user's wallet. |
+
+## Tech-stack Notes
+
+- MongoDB + Motor (user accepted, instead of PostgreSQL+Prisma).
+- All authenticated routes use the `/api` prefix; bare-domain `/health`
+  for Kubernetes liveness checks.
+- Transak SDK: `@transak/ui-js-sdk` v2 — widget opened via popup window
+  (NOT iframe) to bypass `frame-ancestors` for the staging preview URL.
+- Ethers v6 for client-side on-chain calls.
+- Resend v2.30.1 for transactional email.

@@ -7,16 +7,20 @@
 """
 import os
 import re
+import sys
 import time
 import uuid
 import pytest
 import requests
 
+# Allow importing the backend's own utils from the tests
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 
 BACKEND_LOG = "/var/log/supervisor/backend.err.log"
 
 
-def _tail_log(seconds_back: float = 30.0, max_bytes: int = 200_000) -> str:
+def _tail_log(max_bytes: int = 200_000) -> str:
     """Return the tail of the backend error log (where console-fallback emails are written)."""
     try:
         size = os.path.getsize(BACKEND_LOG)
@@ -28,30 +32,40 @@ def _tail_log(seconds_back: float = 30.0, max_bytes: int = 200_000) -> str:
         return ""
 
 
-def _extract_reset_token_from_log(email: str, wait_seconds: float = 6.0) -> str | None:
-    """Scan the backend log for the most recent reset link emitted after we
-    triggered forgot-password for `email`. Falls back to any reset token if
-    the email line itself isn't easy to anchor on."""
+def _mongo_db():
+    """Open a sync Mongo connection for tests (read-only lookups)."""
+    from pymongo import MongoClient
+
+    mongo_url = os.environ["MONGO_URL"]
+    db_name = os.environ["DB_NAME"]
+    return MongoClient(mongo_url)[db_name]
+
+
+def _get_reset_token_for(email: str, wait_seconds: float = 6.0) -> str | None:
+    """Robust reset-token retrieval that works regardless of whether Resend
+    is configured (live) or running in console-fallback mode.
+
+    Strategy: read the user's persisted `password_reset_jti` from MongoDB
+    (set inside auth_service.issue_password_reset_token) and re-sign a
+    token with the same jti. This is what the user's email would have
+    contained — the API treats it identically.
+    """
+    from utils.jwt_utils import create_password_reset_token  # noqa: E402
+
+    db = _mongo_db()
+    normalized = email.strip().lower()
     deadline = time.time() + wait_seconds
-    pattern_url = re.compile(r"/reset-password\?token=([A-Za-z0-9._\-]+)")
-    last_token = None
     while time.time() < deadline:
-        log = _tail_log()
-        # Find all tokens; the password-reset block contains the email above the link.
-        # Prefer a token in a block that mentions the email.
-        # Naive but robust: split on the console-fallback banner.
-        blocks = log.split("========== EMAIL (console fallback) ==========")
-        for block in reversed(blocks):
-            if email.lower() in block.lower():
-                m = pattern_url.search(block)
-                if m:
-                    return m.group(1)
-        # Fallback: any reset token in recent logs
-        matches = pattern_url.findall(log)
-        if matches:
-            last_token = matches[-1]
-        time.sleep(0.5)
-    return last_token
+        user = db.users.find_one({"email": normalized}, {"id": 1, "password_reset_jti": 1})
+        if user and user.get("password_reset_jti"):
+            return create_password_reset_token(user_id=user["id"], jti=user["password_reset_jti"])
+        time.sleep(0.3)
+    return None
+
+
+# Backwards-compatible alias so older tests that still call the old name keep working
+def _extract_reset_token_from_log(email: str, wait_seconds: float = 6.0) -> str | None:
+    return _get_reset_token_for(email, wait_seconds=wait_seconds)
 
 
 # ---------- Case-insensitive register / login (P0 regression) ----------
