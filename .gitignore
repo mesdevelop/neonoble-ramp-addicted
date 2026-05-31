@@ -93,3 +93,8 @@ android-sdk/ -e
 # Environment files
 *.env
 *.env.*
+.env
+.env.*
+credentials.json
+*.key
+.credentials
