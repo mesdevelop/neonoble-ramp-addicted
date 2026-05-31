@@ -1,6 +1,6 @@
 # NeoNoble Ramp — Product Requirements Document
 
-_Living document. Last updated: 2026-02 (iter_4)_
+_Living document. Last updated: 2026-05 (iter_5 — CASP Sprint 1)_
 
 ## Original Problem Statement
 
@@ -17,6 +17,10 @@ Build a full-stack on/off-ramp platform for the **NeoNoble Ramp** product
   on-chain detection + Stripe SEPA payout).
 - **Transak Widget STAGING integration** for UK compliance video.
 - **PancakeSwap V2 on-chain swap** for the custom NENO token.
+- **CASP Operating Stack (new)** — full 7-block MiCAR back-office to
+  prepare CONSOB authorisation while staying compliant via Transak / PancakeSwap
+  in shadow mode. Sumsub / Chainalysis / Fireblocks / Notabene integrated via
+  swappable adapter pattern (MOCK by default, LIVE flag per provider).
 
 ## Architecture (current)
 
@@ -59,7 +63,7 @@ Build a full-stack on/off-ramp platform for the **NeoNoble Ramp** product
 - `AuthShell` component, login `Forgot your password?` link,
   dashboard `Change Password` nav
 
-### Iteration 4 (current — Transak partner key + PancakeSwap + Enterprise OTC)
+### Iteration 4 (Transak partner key + PancakeSwap + Enterprise OTC)
 - **Transak partner staging key** wired in `.env`; API secret kept
   server-side for webhook verification
 - **Transak server-to-server webhook** `POST /api/transak/webhook` with
@@ -81,31 +85,73 @@ Build a full-stack on/off-ramp platform for the **NeoNoble Ramp** product
 - `TRANSAK_SUPPORTS_NENO=false` flag — flip to `true` after Transak's
   Asset Listing approval, and NENO appears automatically in the picker.
 
+### Iteration 5 (current — CASP Operating Stack Sprint 1, 2026-05-31)
+- **CASP back-office at `/admin/*`** — 9-section console (Dashboard,
+  KYC/KYB, AML & Alerts, Treasury, OTC Desk B2B, Reporting, Customer
+  Protection, Governance, Audit Log) gated by base role `ADMIN` +
+  CASP role claims (`casp_admin_users` collection).
+- **All 7 MiCAR operational blocks** wired end-to-end with REST API
+  (`/api/casp/*`) and React UI (`/app/frontend/src/pages/Admin.js`):
+  Block 1 KYC/KYB/Risk/Sanctions • Block 2 AML/Travel-Rule/SAR •
+  Block 3 Custody/Reconciliation/Proof-of-Reserves • Block 4 B2B OTC
+  desk with **4-eye approval > €50k** + best-execution evidence •
+  Block 5 Reporting + Capital Adequacy snapshots • Block 6 Complaints
+  (15-day SLA) + Asset Disclosures • Block 7 RBAC + Operational
+  Incidents (DORA) + Conflicts of Interest.
+- **Provider adapter pattern** in `services/casp/`: Sumsub (KYC),
+  Chainalysis (KYT), Fireblocks (MPC custody), Notabene (Travel Rule).
+  All four in MOCK mode by default; `<PROVIDER>_LIVE=true` env flag
+  swaps each to live without code change.
+- **Immutable WORM audit log** (`casp_audit_log`) — SHA-256 hash-chained,
+  monotonic `sequence` index, `/api/casp/audit/verify` replays chain
+  (CONSOB-grade evidence trail).
+- **CASP RBAC** with 7 roles (ADMIN, MLRO, COMPLIANCE_OFFICER,
+  RISK_OFFICER, TREASURY_OFFICER, OTC_TRADER, AUDITOR) +
+  `require_casp_roles()` factory + 7 pre-built dependencies.
+- **Seed script** `backend/scripts/seed_casp.py` creates 5 admin users,
+  6 retail customers + 1 B2B institutional client, plus realistic
+  sample data (KYC, AML, wallets, OTC, complaints, incidents, PoR).
+- **CONSOB technical brief** at `/app/CASP_CONSOB_BRIEF.md` (EN + IT
+  appendix) ready to attach to the authorisation application.
+- Testing: 36/36 pytest backend + 6/6 frontend assertion groups
+  (iteration_5.json). Legacy auth/Transak regression OK.
+
 ## Backlog
 
 ### P0 — Pending external action
+- 🚨 **Reply to Transak compliance (Rahul Das)** — copy-paste the email body
+  from `/app/TRANSAK_COMPLIANCE_REPLY.md` (English version) into Rahul's
+  thread of 20/05/2026 to lift the KYB "on hold" status.
 - 🌐 **Verify `neonoble-ramp.com` on Resend** (5 min) → unlock email
   delivery to arbitrary recipients (not just verified ones).
 - 🆔 **Submit NENO Asset Listing request** to Transak Partner Dashboard
-  with contract `0xeF3F5C1892A8d7A3304E4A15959E124402d69974`. Expected
-  2–7 days for staging approval.
-- 🎬 **Record the Transak compliance video** using `/transak` +
-  `TRANSAK_DEMO_WALKTHROUGH_IT.md`.
-- 🔑 Live Stripe keys (carried over from earlier sprint).
+  with contract `0xeF3F5C1892A8d7A3304E4A15959E124402d69974`.
+- 🎬 **Record the Transak compliance video** locally using `/transak` +
+  `TRANSAK_DEMO_WALKTHROUGH_IT.md` (cannot be done by the AI agent).
+- 🔑 Live Stripe keys (carried over).
+- 🤝 **CASP Sprint 2 — Sumsub onboarding**: provide partner API keys to
+  flip Sumsub adapter to LIVE (`SUMSUB_LIVE=true` + tokens in `.env`).
 
 ### P1 — Scheduled
 - 🍪 HttpOnly cookie auth migration (Option A) — next sprint.
 - 🏊 **Provide initial liquidity** to a NENO/USDC PancakeSwap V2 pool on
-  BSC mainnet so the swap UI returns actual quotes (currently fails
-  gracefully with "No liquidity pool found").
+  BSC mainnet so the swap UI returns actual quotes.
 - 🔨 Refactor `execute_offramp`/`execute_onramp`/`process_deposit_received`
   in `services/ramp_service.py`.
+- 🧪 **CASP Sprint 3** — Chainalysis KYT contract + live integration.
+- 🏦 **CASP Sprint 4** — Fireblocks workspace provisioning + live custody.
+- 🌐 **CASP Sprint 5** — Notabene Travel Rule live.
+- 🪪 **Sub-admin base role** (`CASP_OPERATOR`) — to actually enforce
+  CASP-role gating on specialists (today they are base=ADMIN per seed so
+  super-admin bypass kicks in; the 4-eye guard is the real safety net but
+  having proper role isolation is cleaner).
 
 ### P2 — Nice-to-haves
 - Move Transak token catalogue to `.env` JSON (no redeploy)
 - Admin endpoint listing all Transak webhook events
 - Transak order-status push from webhook into user's notification panel
-- 2FA TOTP for DEVELOPER role
+- 2FA TOTP for DEVELOPER + ADMIN roles
+- Export audit log as a signed PDF (Adobe LTV/PAdES) for off-chain archival
 
 ## Files of Reference
 
