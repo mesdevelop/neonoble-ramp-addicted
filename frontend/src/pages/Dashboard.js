@@ -47,6 +47,13 @@ export default function Dashboard() {
                   Dev Portal
                 </Link>
               )}
+              <Link
+                to="/change-password"
+                className="text-gray-300 hover:text-white px-3 py-2 text-sm"
+                data-testid="nav-change-password"
+              >
+                Change Password
+              </Link>
               <span className="text-gray-400 text-sm">{user?.email}</span>
               <button
                 onClick={handleLogout}

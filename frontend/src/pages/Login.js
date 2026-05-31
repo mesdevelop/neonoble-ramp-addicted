@@ -106,6 +106,15 @@ export default function Login() {
                 Sign up
               </Link>
             </p>
+            <p className="text-gray-400 mt-2">
+              <Link
+                to="/forgot-password"
+                className="text-purple-400 hover:text-purple-300"
+                data-testid="link-to-forgot-password"
+              >
+                Forgot your password?
+              </Link>
+            </p>
           </div>
 
           <div className="mt-4 text-center">

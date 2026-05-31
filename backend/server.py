@@ -63,9 +63,10 @@ from services.wallet_service import WalletService
 from services.blockchain_listener import BlockchainListener
 from services.stripe_payout_service import StripePayoutService
 from services.transak_service import TransakService
+from services.email_service import EmailService
 
 # Import routes
-from routes.auth import router as auth_router, set_auth_service
+from routes.auth import router as auth_router, set_auth_service, set_email_service
 from routes.dev_portal import router as dev_router, set_api_key_service
 from routes.ramp_api import router as ramp_api_router, set_services as set_ramp_api_services
 from routes.user_ramp import router as user_ramp_router, set_ramp_service
@@ -80,6 +81,7 @@ wallet_service = WalletService(db)
 blockchain_listener = BlockchainListener(db)
 payout_service = StripePayoutService(db)
 transak_service = TransakService(db)
+email_service = EmailService()
 
 # Wire up services
 ramp_service.set_wallet_service(wallet_service)
@@ -93,6 +95,7 @@ set_ramp_api_services(ramp_service, api_key_service)
 set_ramp_service(ramp_service)
 set_webhooks_payout_service(payout_service)
 set_transak_service(transak_service)
+set_email_service(email_service)
 
 # Background task for blockchain monitoring
 blockchain_poll_task = None

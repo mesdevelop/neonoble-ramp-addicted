@@ -26,7 +26,8 @@ class TestAuthRegisterLogin:
         assert "access_token" in d and d["access_token"]
         assert "refresh_token" in d and d["refresh_token"]
         assert d.get("token") == d["access_token"], "legacy token alias must equal access_token"
-        assert d["user"]["email"] == email
+        # Email is normalized to lowercase server-side (case-insensitive accounts)
+        assert d["user"]["email"] == email.lower()
         assert d["user"]["role"] == "USER"
 
     def test_login_returns_access_refresh_legacy_token(self, api_client, base_url, user_account):
@@ -38,7 +39,7 @@ class TestAuthRegisterLogin:
         d = r.json()
         assert d["access_token"] and d["refresh_token"]
         assert d["token"] == d["access_token"]
-        assert d["user"]["email"] == user_account["email"]
+        assert d["user"]["email"] == user_account["email"].lower()
 
     def test_login_invalid_credentials(self, api_client, base_url, user_account):
         r = api_client.post(
@@ -87,7 +88,7 @@ class TestAuthRefresh:
         api_client.headers.update({"Authorization": f"Bearer {d['access_token']}"})
         me = api_client.get(f"{base_url}/api/auth/me")
         assert me.status_code == 200
-        assert me.json()["email"] == user_account["email"]
+        assert me.json()["email"] == user_account["email"].lower()
 
     def test_refresh_with_invalid_token_returns_401(self, api_client, base_url):
         r = api_client.post(
@@ -111,7 +112,7 @@ class TestAuthMe:
     def test_me_with_access_token(self, base_url, user_account, user_authed_client):
         r = user_authed_client.get(f"{base_url}/api/auth/me")
         assert r.status_code == 200, r.text
-        assert r.json()["email"] == user_account["email"]
+        assert r.json()["email"] == user_account["email"].lower()
 
     def test_me_without_token(self, api_client, base_url):
         r = api_client.get(f"{base_url}/api/auth/me")

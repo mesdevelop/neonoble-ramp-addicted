@@ -11,6 +11,9 @@ import Dashboard from "./pages/Dashboard";
 import DevPortal from "./pages/DevPortal";
 import DevLogin from "./pages/DevLogin";
 import TransakDemo from "./pages/TransakDemo";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import ChangePassword from "./pages/ChangePassword";
 
 // Protected Route Component
 function ProtectedRoute({ children, requireDeveloper = false }) {
@@ -109,6 +112,18 @@ function AppRoutes() {
 
       {/* Transak compliance demo (auth not required — non-custodial demo flow) */}
       <Route path="/transak" element={<TransakDemo />} />
+
+      {/* Password recovery */}
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route
+        path="/change-password"
+        element={
+          <ProtectedRoute>
+            <ChangePassword />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Catch all - redirect to home */}
       <Route path="*" element={<Navigate to="/" replace />} />

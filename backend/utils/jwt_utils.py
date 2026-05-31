@@ -15,6 +15,7 @@ JWT_ALGORITHM = 'HS256'
 # via silent refresh from the frontend.
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get('ACCESS_TOKEN_EXPIRE_MINUTES', '15'))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.environ.get('REFRESH_TOKEN_EXPIRE_DAYS', '7'))
+PASSWORD_RESET_TTL_HOURS = int(os.environ.get('PASSWORD_RESET_TTL_HOURS', '24'))
 
 
 def _build_payload(user_id: str, email: str, role: str, expires_at: datetime, token_type: str) -> dict:
@@ -61,6 +62,33 @@ def decode_refresh_token(token: str) -> Optional[dict]:
         return None
     if payload.get('type') != 'refresh':
         logger.warning("Token type mismatch: expected refresh token")
+        return None
+    return payload
+
+
+def create_password_reset_token(user_id: str, jti: str) -> str:
+    """Create a single-use password-reset token.
+    `jti` is persisted on the user document — when the user resets, we
+    clear the stored jti so the same token can't be replayed.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(hours=PASSWORD_RESET_TTL_HOURS)
+    payload = {
+        'sub': user_id,
+        'jti': jti,
+        'type': 'password_reset',
+        'exp': expire,
+        'iat': datetime.now(timezone.utc),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def decode_password_reset_token(token: str) -> Optional[dict]:
+    """Decode + validate a password-reset token (rejects other types)."""
+    payload = _decode(token)
+    if payload is None:
+        return None
+    if payload.get('type') != 'password_reset':
+        logger.warning("Token type mismatch: expected password_reset token")
         return None
     return payload
 

@@ -5,7 +5,8 @@ import logging
 
 from models.user import User, UserCreate, UserResponse, UserRole
 from utils.password import hash_password, verify_password
-from utils.jwt_utils import create_access_token, create_refresh_token
+from utils.jwt_utils import create_access_token, create_refresh_token, create_password_reset_token
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +120,81 @@ class AuthService:
         if not user_doc or not user_doc.get('is_active', True):
             return None
         return self._issue_tokens(user_doc)
+
+    async def issue_password_reset_token(self, email: str) -> Optional[tuple[str, str]]:
+        """Generate + persist a single-use password reset token.
+
+        Returns (token, email) if the user exists, None otherwise.
+        Caller is responsible for emailing the token. The endpoint MUST
+        return the same response in both cases (no user enumeration).
+        """
+        email = self._normalize_email(email)
+        user_doc = await self.collection.find_one({"email": email})
+        if not user_doc or not user_doc.get('is_active', True):
+            return None
+        jti = uuid.uuid4().hex
+        token = create_password_reset_token(user_id=user_doc['id'], jti=jti)
+        await self.collection.update_one(
+            {"id": user_doc['id']},
+            {"$set": {
+                "password_reset_jti": jti,
+                "password_reset_requested_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        return token, user_doc['email']
+
+    async def reset_password_with_token(self, payload: dict, new_password: str) -> tuple[bool, Optional[str]]:
+        """Consume a password-reset token and update the user's password.
+        Single-use: the stored jti must match the token's jti, and is cleared on success.
+        """
+        if len(new_password) < 8:
+            return False, "Password must be at least 8 characters"
+        user_id = payload.get('sub')
+        token_jti = payload.get('jti')
+        if not user_id or not token_jti:
+            return False, "Invalid token"
+        user_doc = await self.collection.find_one({"id": user_id})
+        if not user_doc:
+            return False, "Invalid token"
+        if user_doc.get('password_reset_jti') != token_jti:
+            return False, "Reset link has already been used or is no longer valid"
+        new_hash = hash_password(new_password)
+        # Update password, clear the single-use jti, and bump token_version to
+        # implicitly invalidate any in-flight refresh tokens (best-effort).
+        new_token_version = int(user_doc.get('token_version', 0)) + 1
+        await self.collection.update_one(
+            {"id": user_id},
+            {"$set": {
+                "password_hash": new_hash,
+                "password_reset_jti": None,
+                "token_version": new_token_version,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        logger.info(f"Password reset successful for user {user_id}")
+        return True, None
+
+    async def change_password(self, user_id: str, current_password: str, new_password: str) -> tuple[bool, Optional[str]]:
+        """Change password for a logged-in user (requires the current password)."""
+        if len(new_password) < 8:
+            return False, "New password must be at least 8 characters"
+        user_doc = await self.collection.find_one({"id": user_id})
+        if not user_doc:
+            return False, "User not found"
+        if not verify_password(current_password, user_doc['password_hash']):
+            return False, "Current password is incorrect"
+        new_hash = hash_password(new_password)
+        new_token_version = int(user_doc.get('token_version', 0)) + 1
+        await self.collection.update_one(
+            {"id": user_id},
+            {"$set": {
+                "password_hash": new_hash,
+                "token_version": new_token_version,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        logger.info(f"Password changed for user {user_id}")
+        return True, None
     
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
         """Get user by ID."""
