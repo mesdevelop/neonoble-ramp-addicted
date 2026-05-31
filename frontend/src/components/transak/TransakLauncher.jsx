@@ -6,10 +6,9 @@ import {
   Loader2,
   ExternalLink,
 } from 'lucide-react';
+import api from '../../api';
 import { transakApi } from '../../api/transak';
 
-const STG_WIDGET_BASE = 'https://global-stg.transak.com';
-const PROD_WIDGET_BASE = 'https://global.transak.com';
 const STG_ORIGIN = 'https://global-stg.transak.com';
 const PROD_ORIGIN = 'https://global.transak.com';
 const POPUP_FEATURES =
@@ -19,20 +18,14 @@ const PRODUCT_MAP = { BUY: 'BUY', SELL: 'SELL', SWAP: 'BUY,SELL' };
 
 const TRACKED_EVENT_PREFIX = 'TRANSAK_';
 
-const buildWidgetUrl = (config, walletAddress, productsAvailed, token) => {
-  const base =
-    config.environment === 'PRODUCTION' ? PROD_WIDGET_BASE : STG_WIDGET_BASE;
-  // Always send the LIVE referrer the browser is actually on, not what's
-  // baked into backend .env. This keeps preview / production / localhost
-  // consistent without redeploys. Transak rejects sessions when the
-  // Origin header and the referrerDomain query param disagree.
+const buildClientParams = (config, walletAddress, productsAvailed, token) => {
+  // The backend enforces apiKey + referrerDomain — we still send referrerDomain
+  // as a hint (window.location.host) so the backend has it.
   const liveReferrer =
     typeof window !== 'undefined' && window.location?.host
       ? window.location.host
-      : config.referrer_domain || '';
-  const params = new URLSearchParams({
-    apiKey: config.api_key,
-    environment: config.environment || 'STAGING',
+      : config?.referrer_domain || '';
+  return {
     productsAvailed,
     cryptoCurrencyCode: token.code,
     network: token.network,
@@ -40,11 +33,10 @@ const buildWidgetUrl = (config, walletAddress, productsAvailed, token) => {
     disableWalletAddressForm: 'true',
     hideMenu: 'true',
     themeColor: '7c3aed',
-    defaultFiatCurrency: config.fiat_currency || 'EUR',
+    defaultFiatCurrency: config?.fiat_currency || 'EUR',
     referrerDomain: liveReferrer,
     partnerCustomerId: walletAddress,
-  });
-  return `${base}?${params.toString()}`;
+  };
 };
 
 export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
@@ -63,17 +55,16 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
   const [selectedToken, setSelectedToken] = useState(defaultToken);
   const [opening, setOpening] = useState(null);
   const [lastEvent, setLastEvent] = useState(null);
+  const [launchError, setLaunchError] = useState('');
 
   const popupRef = useRef(null);
   const pollRef = useRef(null);
   const allowedOriginRef = useRef(STG_ORIGIN);
 
-  // Keep the selected token in sync when the catalogue arrives.
   useEffect(() => {
     setSelectedToken(defaultToken);
   }, [defaultToken]);
 
-  // Listen for postMessage events from the Transak popup window
   useEffect(() => {
     const handler = (event) => {
       if (event.origin !== allowedOriginRef.current) return;
@@ -118,12 +109,32 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
   );
 
   const launch = useCallback(
-    (mode) => {
+    async (mode) => {
       if (!walletAddress || !selectedToken) return;
       setOpening(mode);
-      const widgetUrl = buildWidgetUrl(config, walletAddress, PRODUCT_MAP[mode], selectedToken);
+      setLaunchError('');
       allowedOriginRef.current =
         config.environment === 'PRODUCTION' ? PROD_ORIGIN : STG_ORIGIN;
+
+      const params = buildClientParams(config, walletAddress, PRODUCT_MAP[mode], selectedToken);
+      let widgetUrl = '';
+      try {
+        const { data } = await api.post('/transak/widget-url', params);
+        widgetUrl = data?.widget_url || '';
+      } catch (err) {
+        const msg =
+          err?.response?.data?.detail ||
+          err?.message ||
+          'Failed to create Transak widget URL';
+        setLaunchError(msg);
+        setOpening(null);
+        return;
+      }
+      if (!widgetUrl) {
+        setLaunchError('Transak returned an empty widget URL. Try again.');
+        setOpening(null);
+        return;
+      }
 
       if (popupRef.current && !popupRef.current.closed) {
         try {
@@ -154,10 +165,6 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
     [config, walletAddress, selectedToken, onEvent, startCloseWatcher]
   );
 
-  // The token's network has to be reachable from the connected wallet.
-  // We disable the launch only when the user has no wallet at all.
-  // For BSC tokens we hint at switching networks; for others we just trust
-  // the user to flip chain inside their wallet if needed.
   const isBscToken = selectedToken?.network === 'bsc';
   const disabled = !walletAddress || (isBscToken && !isBSC);
 
@@ -204,8 +211,8 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
         </div>
         {!config?.supports_neno && (
           <p className="text-xs text-yellow-300/80 mt-2" data-testid="neno-pending-note">
-            NENO listing on Transak is pending — to add a custom token, file an "Add Custom Token"
-            request in the Transak Partner Dashboard with the contract{' '}
+            NENO listing on Transak is pending — file an "Add Custom Token" request in the Transak
+            Partner Dashboard with the contract{' '}
             <span className="font-mono">{config?.neno_contract?.slice(0, 10)}…</span>.
           </p>
         )}
@@ -214,7 +221,7 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
       <div className="flex items-start gap-2 text-xs text-gray-400 mb-5">
         <ExternalLink className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-purple-300" />
         <p>
-          Transak opens in a separate popup window — never an iframe inside this page.
+          Transak opens in a separate popup window via a server-side session URL — never an iframe.
           walletAddress is locked to the address you connected above
           (<code>disableWalletAddressForm=true</code>).
         </p>
@@ -249,6 +256,15 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
           testId="launch-swap-btn"
         />
       </div>
+
+      {launchError && (
+        <div
+          className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-red-200 text-xs"
+          data-testid="launch-error"
+        >
+          {launchError}
+        </div>
+      )}
 
       {disabled && (
         <p className="text-yellow-300 text-xs mt-4" data-testid="launcher-disabled-note">
@@ -290,9 +306,8 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
             environment: <span className="text-purple-200">{config?.environment}</span>
           </p>
           <p className="text-gray-500 mt-2">
-            If the popup shows "Something went wrong", confirm this exact{' '}
-            <strong>referrerDomain</strong> is whitelisted under{' '}
-            <em>Transak Partner Dashboard → Settings → Allowed Domains</em>.
+            If Buy/Sell fails: in the Transak Partner Dashboard, confirm both the{' '}
+            <strong>referrer domain above</strong> AND the IP of this backend are whitelisted.
           </p>
         </div>
       </details>
