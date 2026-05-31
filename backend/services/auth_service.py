@@ -15,6 +15,15 @@ class AuthService:
         self.db = db
         self.collection = db.users
     
+    @staticmethod
+    def _normalize_email(email: str) -> str:
+        """Canonicalise an email so lookups are case-insensitive.
+        Pydantic's EmailStr lowercases the domain but keeps the local part as-is,
+        which leads to subtle 'user not found' bugs when the same human types
+        their email with slightly different casing across register/login.
+        """
+        return (email or "").strip().lower()
+
     async def register(self, user_data: UserCreate) -> tuple[Optional[User], Optional[str]]:
         """Register a new user.
         
@@ -22,16 +31,17 @@ class AuthService:
             Tuple of (User, None) on success, or (None, error_message) on failure
         """
         try:
+            email = self._normalize_email(user_data.email)
             # Check if email already exists
-            existing = await self.collection.find_one({"email": user_data.email})
+            existing = await self.collection.find_one({"email": email})
             if existing:
-                logger.warning(f"Registration failed: email already exists - {user_data.email}")
+                logger.warning(f"Registration failed: email already exists - {email}")
                 return None, "Email already registered"
             
             # Create user
             password_hash = hash_password(user_data.password)
             user = User(
-                email=user_data.email,
+                email=email,
                 password_hash=password_hash,
                 role=user_data.role
             )
@@ -58,6 +68,7 @@ class AuthService:
             or (None, error_message) on failure
         """
         try:
+            email = self._normalize_email(email)
             # Find user
             user_doc = await self.collection.find_one({"email": email})
             if not user_doc:
@@ -123,6 +134,7 @@ class AuthService:
     
     async def get_user_by_email(self, email: str) -> Optional[User]:
         """Get user by email."""
+        email = self._normalize_email(email)
         user_doc = await self.collection.find_one({"email": email})
         if user_doc:
             if isinstance(user_doc.get('created_at'), str):

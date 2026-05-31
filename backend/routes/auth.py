@@ -75,8 +75,16 @@ async def register(request: RegisterRequest):
             logger.warning(f"Registration failed for {request.email}: {error}")
             raise HTTPException(status_code=400, detail=error)
 
-        # Auto-login after registration
-        tokens, _ = await auth_service.login(request.email, request.password)
+        # Auto-login after registration (uses the persisted, normalized email)
+        tokens, login_error = await auth_service.login(user.email, request.password)
+        if not tokens:
+            logger.error(
+                f"Auto-login after registration failed for {user.email}: {login_error}"
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Registration succeeded but auto-login failed. Please log in manually.",
+            )
         return _build_auth_response(tokens, user, "Registration successful")
 
     except HTTPException:

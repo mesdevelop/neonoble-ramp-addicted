@@ -11,6 +11,12 @@ const PROD_ORIGIN = 'https://global.transak.com';
 const buildWidgetUrl = (config, walletAddress, productsAvailed) => {
   const base = config.environment === 'PRODUCTION' ? PROD_WIDGET_BASE : STG_WIDGET_BASE;
   const cryptoCurrencyCode = config.supports_neno ? 'NENO' : config.fallback_token || 'USDC';
+  // Keep the param set MINIMAL for the public staging key. The public demo
+  // key has a very strict validator: any "unknown" or unsupported combo of
+  // referrerDomain / network / cryptoCurrencyCode triggers a generic
+  // "Something went wrong with this transaction" on Transak's backend.
+  // Once a partner-specific staging apiKey is provisioned, we can re-enable
+  // referrerDomain, partnerCustomerId, themeColor, etc.
   const params = new URLSearchParams({
     apiKey: config.api_key,
     environment: config.environment || 'STAGING',
@@ -20,10 +26,7 @@ const buildWidgetUrl = (config, walletAddress, productsAvailed) => {
     walletAddress,
     disableWalletAddressForm: 'true',
     hideMenu: 'true',
-    themeColor: '7c3aed',
     defaultFiatCurrency: config.fiat_currency || 'EUR',
-    referrerDomain: config.referrer_domain || window.location.host,
-    partnerCustomerId: walletAddress,
   });
   return `${base}?${params.toString()}`;
 };
