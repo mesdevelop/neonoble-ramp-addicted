@@ -85,7 +85,7 @@ Build a full-stack on/off-ramp platform for the **NeoNoble Ramp** product
 - `TRANSAK_SUPPORTS_NENO=false` flag — flip to `true` after Transak's
   Asset Listing approval, and NENO appears automatically in the picker.
 
-### Iteration 5 (current — CASP Operating Stack Sprint 1, 2026-05-31)
+### Iteration 5 (CASP Operating Stack Sprint 1, 2026-05-31)
 - **CASP back-office at `/admin/*`** — 9-section console (Dashboard,
   KYC/KYB, AML & Alerts, Treasury, OTC Desk B2B, Reporting, Customer
   Protection, Governance, Audit Log) gated by base role `ADMIN` +
@@ -100,21 +100,47 @@ Build a full-stack on/off-ramp platform for the **NeoNoble Ramp** product
   Incidents (DORA) + Conflicts of Interest.
 - **Provider adapter pattern** in `services/casp/`: Sumsub (KYC),
   Chainalysis (KYT), Fireblocks (MPC custody), Notabene (Travel Rule).
-  All four in MOCK mode by default; `<PROVIDER>_LIVE=true` env flag
-  swaps each to live without code change.
 - **Immutable WORM audit log** (`casp_audit_log`) — SHA-256 hash-chained,
-  monotonic `sequence` index, `/api/casp/audit/verify` replays chain
-  (CONSOB-grade evidence trail).
-- **CASP RBAC** with 7 roles (ADMIN, MLRO, COMPLIANCE_OFFICER,
-  RISK_OFFICER, TREASURY_OFFICER, OTC_TRADER, AUDITOR) +
-  `require_casp_roles()` factory + 7 pre-built dependencies.
-- **Seed script** `backend/scripts/seed_casp.py` creates 5 admin users,
-  6 retail customers + 1 B2B institutional client, plus realistic
-  sample data (KYC, AML, wallets, OTC, complaints, incidents, PoR).
-- **CONSOB technical brief** at `/app/CASP_CONSOB_BRIEF.md` (EN + IT
-  appendix) ready to attach to the authorisation application.
-- Testing: 36/36 pytest backend + 6/6 frontend assertion groups
-  (iteration_5.json). Legacy auth/Transak regression OK.
+  monotonic `sequence` index, `/api/casp/audit/verify` replays chain.
+- **CASP RBAC** with 7 roles + 7 pre-built FastAPI dependencies.
+- **Seed script** `backend/scripts/seed_casp.py` (idempotent) with
+  5 admin users + 6 retail + 1 B2B institutional client.
+- **CONSOB technical brief** at `/app/CASP_CONSOB_BRIEF.md` (EN + IT).
+- Testing: 36/36 pytest + 6/6 frontend (iteration_5.json).
+
+### Iteration 6 (current — CASP Autonomous Mode, 2026-05-31)
+- **`CASP_AUTONOMOUS_MODE=true`** flag (default ON) — the CaspService
+  factory selects in-house adapters under `services/casp/internal/`
+  instead of Sumsub / Chainalysis / Fireblocks / Notabene.
+- **4 in-house adapters** replacing vendors 1-for-1 via interface
+  inheritance from `services/casp/base.py`:
+  * `internal/kyc_adapter.py` — document upload to MongoDB + manual MLRO
+    review queue + name-based sanctions pre-screen
+  * `internal/kyt_adapter.py` — bundled OFAC SDN crypto blacklist + known
+    mixer set (Tornado Cash, Blender, ChipMixer, Garantex) + 1-hop
+    counterparty check + wallet-age/volume heuristics via free BscScan /
+    Etherscan API
+  * `internal/custody_adapter.py` — reuses existing HD wallet (BIP44) for
+    address derivation + on-chain Gnosis Safe multi-sig + intent-record-
+    then-external-sign workflow
+  * `internal/trp_adapter.py` — IVMS-101 v1.0.1 open standard over HTTPS
+    with HMAC-SHA256, internal `casp_vasp_directory` for bilateral peer
+    onboarding
+- **New endpoints**: `POST /api/casp/kyc/{id}/documents` (upload),
+  `GET /api/casp/sanctions/status`, `POST /api/casp/sanctions/refresh`,
+  `GET/POST /api/casp/trp/vasps`, `GET/POST /api/casp/trp/inbox`
+  (inbound endpoint open, HMAC-verified against per-VASP shared secret).
+- **Bundled sanctions list** in `internal/sanctions_data.py` —
+  8 OFAC-sanctioned crypto addresses (Tornado Cash, Blender, Garantex,
+  ChipMixer), 2 known mixer contracts, 4 sanctioned individuals (sample
+  for demo; full lists are public CSV/XML and can be refreshed daily).
+- **Admin Console gets an "Autonomy" page** with live KYT tester,
+  sanctions counts, VASP directory and TRP inbox views.
+- **CONSOB brief Section 5** rewritten to document the autonomous mode
+  as the primary operational configuration (vendors marked OPTIONAL).
+- Test: 36/36 pytest still green in autonomous mode + manual E2E shows
+  Tornado Cash → `risk_score: 100, is_critical: true, categories: [sanctions]`,
+  inbound TRP HMAC verification works, audit chain 43 entries verified.
 
 ## Backlog
 

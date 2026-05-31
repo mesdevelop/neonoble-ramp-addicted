@@ -360,6 +360,42 @@ async def main() -> None:
     )
     print(f"  ✓ PoR + MiCAR T+1 report")
 
+    print("→ Seeding VASP directory (3 demo peers for autonomous Travel Rule)…")
+    sample_vasps = [
+        {
+            "did": "did:web:bigexchange.example",
+            "name": "BigExchange Ltd",
+            "trp_endpoint": "https://bigexchange.example/trp/inbox",
+            "known_addresses": ["0x28c6c06298d514db089934071355e5743bf21d60"],
+            "shared_secret": "demo-shared-secret-bigexchange",
+        },
+        {
+            "did": "did:web:safecustody.example",
+            "name": "SafeCustody Bank",
+            "trp_endpoint": "https://safecustody.example/api/trp",
+            "known_addresses": ["0xbe0eb53f46cd790cd13851d5eff43d12404d33e8"],
+            "shared_secret": "demo-shared-secret-safecustody",
+        },
+        {
+            "did": "did:web:cryptoexch.example",
+            "name": "CryptoExch SA",
+            "trp_endpoint": "https://cryptoexch.example/.well-known/trp",
+            "known_addresses": ["0x564286362092d8e7936f0549571a803b203aaced"],
+            "shared_secret": "demo-shared-secret-cryptoexch",
+        },
+    ]
+    for v in sample_vasps:
+        await casp.upsert_vasp(
+            did=v["did"], name=v["name"], trp_endpoint=v["trp_endpoint"],
+            known_addresses=v["known_addresses"], shared_secret=v["shared_secret"],
+            actor=actor_system,
+        )
+    print(f"  ✓ 3 peer VASPs registered")
+
+    print("→ Recording initial sanctions-list refresh…")
+    await casp.sanctions_record_refresh(actor_system)
+    print("  ✓ Sanctions list refresh logged")
+
     print()
     print("=" * 68)
     print("CASP SEED COMPLETE")

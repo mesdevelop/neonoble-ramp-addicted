@@ -70,7 +70,7 @@ class ChainalysisAdapter(BlockchainAnalyticsProvider):
         if not self.is_live:
             return self._mock_tx_screen(tx_hash, chain)
 
-        path = f"/api/kyt/v2/transfers/received"
+        path = "/api/kyt/v2/transfers/received"
         async with httpx.AsyncClient(timeout=20) as client:
             r = await client.post(
                 f"{self.BASE_URL}{path}",

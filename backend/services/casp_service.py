@@ -14,6 +14,7 @@ Design choices:
 from __future__ import annotations
 
 import logging
+import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -38,6 +39,10 @@ from services.casp.sumsub_adapter import SumsubAdapter
 from services.casp.chainalysis_adapter import ChainalysisAdapter
 from services.casp.fireblocks_adapter import FireblocksAdapter
 from services.casp.notabene_adapter import NotabeneAdapter
+from services.casp.internal.kyc_adapter import InternalKycAdapter
+from services.casp.internal.kyt_adapter import InternalKytAdapter
+from services.casp.internal.custody_adapter import InternalCustodyAdapter
+from services.casp.internal.trp_adapter import InternalTrpAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -45,14 +50,30 @@ OTC_APPROVAL_THRESHOLD_EUR = 50_000.0
 COMPLAINT_SLA_DAYS = 15
 
 
+def _autonomous() -> bool:
+    """Read autonomous-mode flag from env (default ON).
+    Set CASP_AUTONOMOUS_MODE=false to opt back into Sumsub/Chainalysis/etc.
+    """
+    return os.environ.get("CASP_AUTONOMOUS_MODE", "true").lower() != "false"
+
+
 class CaspService:
-    def __init__(self, db: AsyncIOMotorDatabase, audit: AuditLogService):
+    def __init__(self, db: AsyncIOMotorDatabase, audit: AuditLogService, wallet_service=None):
         self.db = db
         self.audit = audit
-        self.sumsub = SumsubAdapter()
-        self.chainalysis = ChainalysisAdapter()
-        self.fireblocks = FireblocksAdapter()
-        self.notabene = NotabeneAdapter()
+        self.autonomous = _autonomous()
+        # Adapter factory — internal (autonomous) or external (vendor).
+        # Each provider can still be individually overridden by
+        # SUMSUB_LIVE / CHAINALYSIS_LIVE / FIREBLOCKS_LIVE / NOTABENE_LIVE flags.
+        self.sumsub = InternalKycAdapter(db=db) if self.autonomous else SumsubAdapter()
+        self.chainalysis = InternalKytAdapter() if self.autonomous else ChainalysisAdapter()
+        self.fireblocks = InternalCustodyAdapter(wallet_service=wallet_service, db=db) if self.autonomous else FireblocksAdapter()
+        self.notabene = InternalTrpAdapter(db=db) if self.autonomous else NotabeneAdapter()
+        logger.info(
+            f"CaspService initialised — autonomous={self.autonomous} "
+            f"(kyc={self.sumsub.name}, kyt={self.chainalysis.name}, "
+            f"custody={self.fireblocks.name}, trp={self.notabene.name})"
+        )
 
     async def initialize(self) -> None:
         # Indexes
@@ -81,6 +102,12 @@ class CaspService:
         await self.db.casp_admin_users.create_index("user_id", unique=True)
         await self.db.casp_approval_workflow.create_index("status")
         await self.db.casp_incidents.create_index("reference", unique=True)
+        # Autonomous-mode collections (idempotent)
+        await self.db.casp_kyc_documents.create_index("provider_applicant_id")
+        await self.db.casp_vasp_directory.create_index("did", unique=True)
+        await self.db.casp_trp_inbox.create_index("received_at")
+        await self.db.casp_trp_outbox.create_index("id")
+        await self.db.casp_custody_intents.create_index("id")
         logger.info("CASP collections & indexes initialised")
 
     # ─────────────────────────────────────────────────────────────────────
@@ -677,3 +704,118 @@ class CaspService:
     async def list_conflicts(self) -> List[Dict[str, Any]]:
         cursor = self.db.casp_conflicts.find({"active": True}, {"_id": 0}).sort("declared_at", -1)
         return await cursor.to_list(length=200)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Autonomous-mode extras (KYC upload, TRP inbox, VASP directory, sanctions)
+    # ─────────────────────────────────────────────────────────────────────
+
+    async def attach_kyc_document(self, kyc_id: str, doc_type: str, document_b64: str,
+                                 mime: str, actor: Dict[str, Any]) -> Dict[str, Any]:
+        kyc = await self.db.casp_kyc.find_one({"id": kyc_id}, {"_id": 0})
+        if not kyc:
+            return {"error": "kyc_not_found"}
+        if not hasattr(self.sumsub, "attach_document"):
+            return {"error": "operation_not_supported_in_vendor_mode"}
+        result = await self.sumsub.attach_document(
+            kyc["provider_applicant_id"], doc_type, document_b64, mime
+        )
+        await self.db.casp_kyc.update_one(
+            {"id": kyc_id},
+            {"$set": {"status": "IN_REVIEW",
+                      "submitted_at": datetime.now(timezone.utc),
+                      "updated_at": datetime.now(timezone.utc)}},
+        )
+        await self.audit.append(
+            actor_id=actor.get("user_id"), actor_email=actor.get("email"), actor_role=actor.get("role"),
+            action="KYC_DOCUMENT_ATTACHED", entity_type="KycRecord", entity_id=kyc_id,
+            payload={"doc_type": doc_type, "sha256": result.get("sha256"),
+                     "size": result.get("size_bytes")},
+        )
+        return result
+
+    async def list_kyc_documents(self, kyc_id: str) -> List[Dict[str, Any]]:
+        kyc = await self.db.casp_kyc.find_one(
+            {"id": kyc_id}, {"_id": 0, "provider_applicant_id": 1}
+        )
+        if not kyc or not hasattr(self.sumsub, "list_documents"):
+            return []
+        return await self.sumsub.list_documents(kyc["provider_applicant_id"])
+
+    async def ingest_trp_inbound(self, body: Dict[str, Any], peer_did: str,
+                                 verified: bool) -> Dict[str, Any]:
+        entry = {
+            "id": str(uuid.uuid4()),
+            "peer_did": peer_did,
+            "verified": verified,
+            "payload": body,
+            "status": "PENDING_REVIEW",
+            "received_at": datetime.now(timezone.utc),
+        }
+        await self.db.casp_trp_inbox.insert_one(entry)
+        await self.audit.append(
+            actor_id="system", action="TRP_INBOUND_RECEIVED",
+            entity_type="TravelRuleTransfer", entity_id=entry["id"],
+            payload={"peer_did": peer_did, "verified": verified},
+        )
+        entry.pop("_id", None)
+        return entry
+
+    async def list_trp_inbox(self, limit: int = 100) -> List[Dict[str, Any]]:
+        cur = self.db.casp_trp_inbox.find({}, {"_id": 0}).sort("received_at", -1).limit(limit)
+        return await cur.to_list(length=limit)
+
+    async def list_vasps(self) -> List[Dict[str, Any]]:
+        cur = self.db.casp_vasp_directory.find(
+            {}, {"_id": 0, "shared_secret": 0}
+        ).sort("name", 1)
+        return await cur.to_list(length=200)
+
+    async def upsert_vasp(self, did: str, name: str, trp_endpoint: str,
+                          known_addresses: List[str], shared_secret: str,
+                          actor: Dict[str, Any]) -> Dict[str, Any]:
+        doc = {
+            "did": did, "name": name, "trp_endpoint": trp_endpoint,
+            "known_addresses": [a.lower() for a in known_addresses],
+            "shared_secret": shared_secret,
+            "verified": True,
+            "updated_at": datetime.now(timezone.utc),
+        }
+        await self.db.casp_vasp_directory.replace_one({"did": did}, doc, upsert=True)
+        await self.audit.append(
+            actor_id=actor.get("user_id"), actor_email=actor.get("email"), actor_role=actor.get("role"),
+            action="VASP_DIRECTORY_UPSERTED", entity_type="VaspDirectory", entity_id=did,
+            payload={"name": name},
+        )
+        return {k: v for k, v in doc.items() if k != "shared_secret"}
+
+    async def sanctions_status(self) -> Dict[str, Any]:
+        from services.casp.internal.sanctions_data import (
+            OFAC_SANCTIONED_CRYPTO, KNOWN_MIXERS, SANCTIONED_INDIVIDUALS,
+        )
+        last = await self.db.casp_sanctions_refreshes.find_one(
+            {}, sort=[("at", -1)], projection={"_id": 0}
+        )
+        return {
+            "ofac_crypto_addresses": len(OFAC_SANCTIONED_CRYPTO),
+            "known_mixers": len(KNOWN_MIXERS),
+            "sanctioned_individuals": len(SANCTIONED_INDIVIDUALS),
+            "last_refresh_at": last.get("at").isoformat() if last and last.get("at") else None,
+            "source": "internal-bundled",
+            "autonomous": self.autonomous,
+        }
+
+    async def sanctions_record_refresh(self, actor: Dict[str, Any]) -> Dict[str, Any]:
+        doc = {
+            "id": str(uuid.uuid4()),
+            "at": datetime.now(timezone.utc),
+            "actor_id": actor.get("user_id"),
+            "sources": ["OFAC_SDN", "EU_CONSOLIDATED", "UN_CONSOLIDATED"],
+        }
+        await self.db.casp_sanctions_refreshes.insert_one(doc)
+        await self.audit.append(
+            actor_id=actor.get("user_id"), actor_email=actor.get("email"),
+            action="SANCTIONS_REFRESHED", entity_type="SanctionsList", entity_id=doc["id"],
+            payload={"sources": doc["sources"]},
+        )
+        doc.pop("_id", None)
+        return doc

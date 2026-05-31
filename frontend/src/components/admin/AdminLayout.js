@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShieldCheck, AlertTriangle, Wallet, TrendingUp,
-  FileText, MessageSquare, Users2, ScrollText, LogOut, Building2,
+  FileText, MessageSquare, Users2, ScrollText, LogOut, Building2, Cpu,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -15,6 +15,7 @@ const NAV = [
   { to: '/admin/reporting', label: 'Reporting', icon: FileText },
   { to: '/admin/protection', label: 'Customer Protection', icon: MessageSquare },
   { to: '/admin/governance', label: 'Governance', icon: Users2 },
+  { to: '/admin/autonomy', label: 'Autonomy', icon: Cpu },
   { to: '/admin/audit', label: 'Audit Log', icon: ScrollText },
 ];
 

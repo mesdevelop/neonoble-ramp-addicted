@@ -19,6 +19,7 @@ from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field
+import json
 
 from middleware.casp_rbac import (
     require_any_admin, require_compliance, require_mlro,
@@ -374,3 +375,99 @@ async def list_audit(limit: int = Query(100, le=500), skip: int = 0,
 async def verify_audit(limit: int = Query(1000, le=10000),
                        actor: dict = Depends(require_any_admin)):
     return await _audit.verify_chain(limit=limit)
+
+
+# ── Autonomous operations (KYC docs, TRP inbox, VASP directory, sanctions) ──
+
+class KycDocReq(BaseModel):
+    doc_type: str  # ID_FRONT | ID_BACK | SELFIE | POA
+    document_b64: str
+    mime: str = "image/jpeg"
+
+
+@router.post("/kyc/{kyc_id}/documents")
+async def upload_kyc_document(kyc_id: str, body: KycDocReq,
+                              actor: dict = Depends(require_compliance)):
+    result = await _casp.attach_kyc_document(kyc_id, body.doc_type, body.document_b64,
+                                              body.mime, actor)
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result)
+    return result
+
+
+@router.get("/kyc/{kyc_id}/documents")
+async def list_kyc_documents(kyc_id: str, actor: dict = Depends(require_compliance)):
+    return await _casp.list_kyc_documents(kyc_id)
+
+
+@router.get("/sanctions/status")
+async def sanctions_status(actor: dict = Depends(require_compliance)):
+    return await _casp.sanctions_status()
+
+
+@router.post("/sanctions/refresh")
+async def sanctions_refresh(actor: dict = Depends(require_compliance)):
+    return await _casp.sanctions_record_refresh(actor)
+
+
+@router.get("/trp/inbox")
+async def list_trp_inbox(limit: int = 100, actor: dict = Depends(require_compliance)):
+    return await _casp.list_trp_inbox(limit)
+
+
+class TrpInboundReq(BaseModel):
+    payload: Dict[str, Any]
+
+
+from fastapi import Request
+
+
+@router.post("/trp/inbox")
+async def trp_inbound(request: Request):
+    """Inbound Travel Rule endpoint — accepts signed IVMS-101 messages from
+    peer CASPs. No JWT auth (peers don't have our auth tokens); we verify
+    via HMAC using the shared secret from `casp_vasp_directory`.
+    """
+    body = await request.body()
+    peer_did = request.headers.get("X-TRP-Originator-DID") or ""
+    ts = request.headers.get("X-TRP-Timestamp") or ""
+    sig = request.headers.get("X-TRP-Signature") or ""
+
+    # Look up peer
+    verified = False
+    if peer_did:
+        peer = await _casp.db.casp_vasp_directory.find_one(
+            {"did": peer_did}, {"_id": 0, "shared_secret": 1}
+        )
+        if peer and peer.get("shared_secret"):
+            verified = _casp.notabene.verify_inbound_signature(  # type: ignore[attr-defined]
+                body, ts, sig, peer["shared_secret"]
+            ) if hasattr(_casp.notabene, "verify_inbound_signature") else False
+
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid_json")
+    entry = await _casp.ingest_trp_inbound(payload, peer_did or "unknown", verified)
+    return {"status": "received", "id": entry["id"], "verified": verified}
+
+
+@router.get("/trp/vasps")
+async def list_vasps(actor: dict = Depends(require_compliance)):
+    return await _casp.list_vasps()
+
+
+class VaspReq(BaseModel):
+    did: str
+    name: str
+    trp_endpoint: str
+    known_addresses: List[str] = Field(default_factory=list)
+    shared_secret: str
+
+
+@router.post("/trp/vasps")
+async def upsert_vasp(body: VaspReq, actor: dict = Depends(require_compliance)):
+    return await _casp.upsert_vasp(
+        body.did, body.name, body.trp_endpoint,
+        body.known_addresses, body.shared_secret, actor,
+    )

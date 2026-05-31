@@ -220,6 +220,14 @@ export const caspApi = {
   listReports: async () => (await api.get('/casp/reports')).data,
   generateMicar: async (body) => (await api.post('/casp/reports/micar', body)).data,
   upsertCapital: async (body) => (await api.post('/casp/capital', body)).data,
+  // Autonomy
+  sanctionsStatus: async () => (await api.get('/casp/sanctions/status')).data,
+  sanctionsRefresh: async () => (await api.post('/casp/sanctions/refresh')).data,
+  listVasps: async () => (await api.get('/casp/trp/vasps')).data,
+  upsertVasp: async (body) => (await api.post('/casp/trp/vasps', body)).data,
+  listTrpInbox: async () => (await api.get('/casp/trp/inbox')).data,
+  uploadKycDocument: async (kycId, body) => (await api.post(`/casp/kyc/${kycId}/documents`, body)).data,
+  listKycDocuments: async (kycId) => (await api.get(`/casp/kyc/${kycId}/documents`)).data,
   // Block 6
   listComplaints: async (status) =>
     (await api.get('/casp/complaints', { params: { status } })).data,

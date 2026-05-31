@@ -138,14 +138,38 @@ The audit chain can be verified anytime via `GET /api/casp/audit/verify` — rep
 
 ## 5. Third-party providers (outsourcing arrangements)
 
-| Provider | Service | Jurisdiction | Contract status | MiCAR alignment |
-|---|---|---|---|---|
-| **Sumsub** | KYC / KYB / liveness / sanctions | UK | Onboarding | AMLD6, ESMA GL on outsourcing |
-| **Chainalysis** | Blockchain analytics (KYT) | US | Onboarding | FATF R.16 |
-| **Fireblocks** | MPC custody | US/IE | Onboarding | MiCAR Art. 75, EBA/GL/2022/04 |
-| **Notabene** | Travel Rule data exchange | US | Onboarding | Reg. (EU) 2023/1113 (TFR) |
-| **Stripe** | EUR settlement & SEPA payouts | IE | Active | PSD2 EMI |
-| **Transak** | Retail on-ramp (interim) | UK/IT | Awaiting KYB approval | CASP transitional period |
+> **⚡ Autonomous Mode (default since v0.2.0, 2026-05-31)**
+>
+> NeoNoble runs in **fully autonomous** configuration by default
+> (`CASP_AUTONOMOUS_MODE=true`). In this mode there is **no dependency on
+> any third-party SaaS for KYC, blockchain analytics, custody or Travel
+> Rule** — all four functions are performed by in-house adapters under
+> `services/casp/internal/`. The external vendors below remain *optional
+> integrations*, switchable via per-provider env flags
+> (`SUMSUB_LIVE=true`, `CHAINALYSIS_LIVE=true`, …), should NeoNoble decide
+> to add vendor coverage for operational redundancy or for proprietary
+> intelligence not available from public sources.
+
+### 5.1 Autonomous (in-house) operation
+
+| Function | Internal implementation | Free public data source |
+|---|---|---|
+| KYC retail / KYB | `internal/kyc_adapter.py` — document upload (MongoDB), hash-pinned, manual MLRO review queue | OFAC SDN sanctioned individuals; EU consolidated; UN list |
+| Sanctions screening | `internal/sanctions_data.py` — bundled list + refresh endpoint | https://www.treasury.gov/ofac/downloads/sdn.xml; webgate.ec.europa.eu/fsd; scsanctions.un.org |
+| Blockchain analytics (KYT) | `internal/kyt_adapter.py` — sanctioned-address blacklist + 1-hop counterparty check + wallet age/volume heuristics | OFAC SDN crypto address subset (public); BscScan/Etherscan free-tier API |
+| Custody | `internal/custody_adapter.py` — existing HD wallet (BIP44) + Gnosis Safe multi-sig (4-of-N) — *intent-record-then-external-sign* model | BSC RPC + Gnosis Safe public contracts |
+| Travel Rule | `internal/trp_adapter.py` — IVMS-101 v1.0.1 over HTTPS + HMAC-SHA256, internal `vasp_directory` bilateral onboarding | IVMS-101 open standard (ivms101.org) |
+
+### 5.2 Optional vendor integrations (currently OFF)
+
+| Provider | Service | Activation env flag |
+|---|---|---|
+| **Sumsub** | KYC / KYB / liveness / sanctions | `SUMSUB_LIVE=true` + `SUMSUB_APP_TOKEN` / `SUMSUB_SECRET_KEY` |
+| **Chainalysis** | Blockchain analytics (KYT) | `CHAINALYSIS_LIVE=true` + `CHAINALYSIS_API_KEY` |
+| **Fireblocks** | MPC custody | `FIREBLOCKS_LIVE=true` + `FIREBLOCKS_API_KEY` / `FIREBLOCKS_PRIVATE_KEY` |
+| **Notabene** | Travel Rule data exchange | `NOTABENE_LIVE=true` + `NOTABENE_API_KEY` |
+| **Stripe** | EUR settlement & SEPA payouts (active) | Required for fiat off-ramp via banking rails |
+| **Transak** | Retail on-ramp (interim, optional) | Required only for fiat on-ramp via licensed third party |
 
 Each adapter follows an interface-first pattern in `services/casp/base.py`,
 so any provider can be replaced with no impact on consumer code.

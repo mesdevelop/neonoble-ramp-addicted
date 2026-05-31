@@ -30,6 +30,7 @@ function DashboardPage() {
       <SectionHeader
         title="CASP Operations Dashboard"
         subtitle="Real-time KPIs across all 7 MiCAR operational blocks."
+        actions={<Pill tone="green">AUTONOMOUS · No third-party dependency</Pill>}
       />
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <Card testId="kpi-kyc-pending" title="KYC Pending" value={kpi.kyc.pending} hint={`${kpi.kyc.approved} approved`} tone="amber" />
@@ -573,6 +574,121 @@ function AuditPage() {
 }
 
 // ────────────────────────────────────────────────────────────────────────
+// Autonomy — sanctions list, VASP directory, TRP inbox, KYT live tester
+// ────────────────────────────────────────────────────────────────────────
+function AutonomyPage() {
+  const [status, setStatus] = useState(null);
+  const [vasps, setVasps] = useState([]);
+  const [inbox, setInbox] = useState([]);
+  const [testAddr, setTestAddr] = useState('0x8589427373d6d84e98730d7795d8f6f8731fda16');
+  const [testResult, setTestResult] = useState(null);
+
+  const reload = async () => {
+    try {
+      const [s, v, i] = await Promise.all([
+        caspApi.sanctionsStatus(), caspApi.listVasps(), caspApi.listTrpInbox(),
+      ]);
+      setStatus(s); setVasps(v); setInbox(i);
+    } catch (e) { toast.error('Load failed'); }
+  };
+  useEffect(() => { reload(); }, []);
+
+  const refresh = async () => {
+    try { await caspApi.sanctionsRefresh(); toast.success('Sanctions refresh logged'); reload(); }
+    catch { toast.error('Refresh failed'); }
+  };
+  const test = async () => {
+    try {
+      const r = await caspApi.screenAddress({ address: testAddr, asset: 'USDC', chain: 'BSC' });
+      setTestResult(r);
+    } catch { toast.error('Screen failed'); }
+  };
+
+  return (
+    <div data-testid="admin-autonomy">
+      <SectionHeader
+        title="Autonomous Operation"
+        subtitle="100% in-house — no Sumsub / Chainalysis / Fireblocks / Notabene dependency. All four functions are performed by internal adapters under services/casp/internal/."
+        actions={status?.autonomous ? <Pill tone="green">AUTONOMOUS MODE</Pill> : <Pill tone="red">VENDOR MODE</Pill>}
+      />
+
+      {status && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <Card testId="auto-ofac" title="OFAC Crypto Addresses" value={status.ofac_crypto_addresses} hint="bundled, refreshable" tone="amber" />
+          <Card testId="auto-mixers" title="Known Mixers" value={status.known_mixers} hint="Tornado Cash et al." />
+          <Card testId="auto-pep" title="Sanctioned Individuals" value={status.sanctioned_individuals} hint="OFAC SDN + EU + UN" />
+          <Card testId="auto-refresh" title="Last Refresh" value={status.last_refresh_at ? formatDateTime(status.last_refresh_at) : 'never'} hint={status.source} />
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-slate-200">In-house KYT Tester</h2>
+            <button data-testid="autonomy-refresh-btn" onClick={refresh} className="text-xs px-2 py-1 rounded bg-amber-400/10 text-amber-300 border border-amber-400/30">
+              Refresh Sanctions
+            </button>
+          </div>
+          <div className="flex gap-2 mb-3">
+            <input
+              data-testid="autonomy-test-input"
+              value={testAddr}
+              onChange={(e) => setTestAddr(e.target.value)}
+              placeholder="0x… address to screen"
+              className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded text-sm font-mono"
+            />
+            <button data-testid="autonomy-test-btn" onClick={test} className="px-3 py-1.5 bg-amber-400/10 text-amber-300 border border-amber-400/30 rounded text-sm">
+              Screen
+            </button>
+          </div>
+          {testResult && (
+            <div className={`rounded p-3 border ${testResult.is_critical ? 'border-rose-500/40 bg-rose-500/5 text-rose-200' : 'border-emerald-500/40 bg-emerald-500/5 text-emerald-200'}`}>
+              <div className="flex items-center gap-2 text-sm mb-1">
+                {testResult.is_critical ? '🚨 CRITICAL' : '✅ CLEAR'}
+                <span className="font-mono">{testResult.risk_score}/100</span>
+                <span className="text-xs text-slate-400">via {testResult.provider}</span>
+              </div>
+              {testResult.categories?.length > 0 && (
+                <div className="text-xs text-slate-300">{testResult.categories.map(c => c.name).join(', ')}</div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5 text-sm text-slate-300">
+          <h2 className="text-sm font-semibold text-slate-200 mb-2">Why autonomous</h2>
+          <ul className="space-y-2 text-slate-400">
+            <li>• No vendor lock-in — all four CASP functions run on internal code.</li>
+            <li>• €0 recurring SaaS fees (vs €3–8k/mo × 4 providers in vendor mode).</li>
+            <li>• Free public data sources only: OFAC SDN, EU & UN consolidated lists, BscScan / Etherscan free API, IVMS-101 open standard.</li>
+            <li>• Each vendor can still be optionally enabled at any time via <code>SUMSUB_LIVE=true</code>, <code>CHAINALYSIS_LIVE=true</code>, etc. — without code change.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2 className="text-sm font-semibold text-slate-200 mb-3">Peer VASP Directory (Travel Rule)</h2>
+      <DataTable testId="autonomy-vasps" rows={vasps} columns={[
+        { key: 'name', label: 'VASP' },
+        { key: 'did', label: 'DID', render: (r) => <code className="text-xs text-slate-400">{r.did}</code> },
+        { key: 'trp_endpoint', label: 'TRP Endpoint', render: (r) => <code className="text-xs text-slate-400">{r.trp_endpoint}</code> },
+        { key: 'known_addresses', label: 'Known Addrs', render: (r) => <span className="font-mono text-xs">{r.known_addresses?.length || 0}</span> },
+        { key: 'verified', label: 'Verified', render: (r) => <Pill tone={r.verified ? 'green' : 'yellow'}>{r.verified ? 'YES' : 'NO'}</Pill> },
+      ]} />
+
+      <h2 className="text-sm font-semibold text-slate-200 mt-8 mb-3">Inbound Travel Rule Messages</h2>
+      <DataTable testId="autonomy-trp-inbox" rows={inbox} emptyText="No inbound TRP messages yet." columns={[
+        { key: 'received_at', label: 'When', render: (r) => formatDateTime(r.received_at) },
+        { key: 'peer_did', label: 'From VASP', render: (r) => <code className="text-xs text-slate-400">{r.peer_did}</code> },
+        { key: 'verified', label: 'Signature', render: (r) => <Pill tone={r.verified ? 'green' : 'red'}>{r.verified ? 'VERIFIED' : 'INVALID'}</Pill> },
+        { key: 'status', label: 'Status', render: (r) => <Pill tone={statusTone(r.status)}>{r.status}</Pill> },
+        { key: 'asset', label: 'Asset', render: (r) => r.payload?.transfer?.asset || '—' },
+        { key: 'amount_eur', label: 'EUR', render: (r) => formatEur(r.payload?.transfer?.amount_eur) },
+      ]} />
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────
 // Root with route guard
 // ────────────────────────────────────────────────────────────────────────
 export default function Admin() {
@@ -602,6 +718,7 @@ export default function Admin() {
         <Route path="reporting" element={<ReportingPage />} />
         <Route path="protection" element={<ProtectionPage />} />
         <Route path="governance" element={<GovernancePage />} />
+        <Route path="autonomy" element={<AutonomyPage />} />
         <Route path="audit" element={<AuditPage />} />
       </Routes>
     </AdminLayout>

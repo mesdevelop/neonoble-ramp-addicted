@@ -87,7 +87,7 @@ payout_service = StripePayoutService(db)
 transak_service = TransakService(db)
 email_service = EmailService()
 audit_log_service = AuditLogService(db)
-casp_service = CaspService(db, audit_log_service)
+casp_service = CaspService(db, audit_log_service, wallet_service=wallet_service)
 bind_casp_db(db)
 
 # Wire up services
