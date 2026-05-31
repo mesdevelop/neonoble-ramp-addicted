@@ -59,6 +59,26 @@ class TransakService:
             in ("1", "true", "yes")
         ) or SUPPORTS_NENO_DEFAULT
 
+        # Curated catalogue of tokens we want to surface as quick-pick in the UI.
+        # Any of them can be passed as cryptoCurrencyCode + network to Transak.
+        # NENO is included only when supports_neno is true (after Transak
+        # whitelists the contract); otherwise the UI hides it.
+        catalogue = [
+            {"code": "USDC", "network": "bsc",       "label": "USDC · BSC"},
+            {"code": "USDT", "network": "bsc",       "label": "USDT · BSC"},
+            {"code": "BNB",  "network": "bsc",       "label": "BNB · BSC"},
+            {"code": "ETH",  "network": "ethereum",  "label": "ETH · Ethereum"},
+            {"code": "USDC", "network": "ethereum",  "label": "USDC · Ethereum"},
+            {"code": "USDC", "network": "polygon",   "label": "USDC · Polygon"},
+            {"code": "MATIC","network": "polygon",   "label": "MATIC · Polygon"},
+            {"code": "BTC",  "network": "mainnet",   "label": "BTC · Bitcoin"},
+        ]
+        if supports_neno:
+            catalogue.insert(
+                0,
+                {"code": "NENO", "network": "bsc", "label": "NENO · BSC (native)"},
+            )
+
         return {
             "api_key": os.environ.get("TRANSAK_API_KEY", ""),
             "environment": os.environ.get("TRANSAK_ENVIRONMENT", "STAGING"),
@@ -69,6 +89,8 @@ class TransakService:
             "supports_neno": supports_neno,
             # Token the UI should use until Transak lists NENO on staging
             "fallback_token": os.environ.get("TRANSAK_FALLBACK_TOKEN", "USDC"),
+            # Token catalogue surfaced as quick-pick buttons in the UI
+            "catalogue": catalogue,
             # Compliance attestation surfaced in the UI for the walkthrough
             "non_custodial": True,
             "compliance": {

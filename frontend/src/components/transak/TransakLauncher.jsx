@@ -1,63 +1,78 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowUpRight, ArrowDownRight, RefreshCw, Loader2, ExternalLink } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowUpRight,
+  ArrowDownRight,
+  RefreshCw,
+  Loader2,
+  ExternalLink,
+} from 'lucide-react';
 import { transakApi } from '../../api/transak';
 
 const STG_WIDGET_BASE = 'https://global-stg.transak.com';
 const PROD_WIDGET_BASE = 'https://global.transak.com';
-
 const STG_ORIGIN = 'https://global-stg.transak.com';
 const PROD_ORIGIN = 'https://global.transak.com';
+const POPUP_FEATURES =
+  'width=480,height=720,resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no,location=no';
 
-const buildWidgetUrl = (config, walletAddress, productsAvailed) => {
-  const base = config.environment === 'PRODUCTION' ? PROD_WIDGET_BASE : STG_WIDGET_BASE;
-  const cryptoCurrencyCode = config.supports_neno ? 'NENO' : config.fallback_token || 'USDC';
-  // Keep the param set MINIMAL for the public staging key. The public demo
-  // key has a very strict validator: any "unknown" or unsupported combo of
-  // referrerDomain / network / cryptoCurrencyCode triggers a generic
-  // "Something went wrong with this transaction" on Transak's backend.
-  // Once a partner-specific staging apiKey is provisioned, we can re-enable
-  // referrerDomain, partnerCustomerId, themeColor, etc.
+const PRODUCT_MAP = { BUY: 'BUY', SELL: 'SELL', SWAP: 'BUY,SELL' };
+
+const TRACKED_EVENT_PREFIX = 'TRANSAK_';
+
+const buildWidgetUrl = (config, walletAddress, productsAvailed, token) => {
+  const base =
+    config.environment === 'PRODUCTION' ? PROD_WIDGET_BASE : STG_WIDGET_BASE;
   const params = new URLSearchParams({
     apiKey: config.api_key,
     environment: config.environment || 'STAGING',
     productsAvailed,
-    cryptoCurrencyCode,
-    network: config.network || 'bsc',
+    cryptoCurrencyCode: token.code,
+    network: token.network,
     walletAddress,
     disableWalletAddressForm: 'true',
     hideMenu: 'true',
+    themeColor: '7c3aed',
     defaultFiatCurrency: config.fiat_currency || 'EUR',
+    referrerDomain: config.referrer_domain || window.location.host,
+    partnerCustomerId: walletAddress,
   });
   return `${base}?${params.toString()}`;
 };
 
-const PRODUCT_MAP = {
-  BUY: 'BUY',
-  SELL: 'SELL',
-  SWAP: 'BUY,SELL',
-};
-
-const POPUP_FEATURES = 'width=480,height=720,resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no,location=no';
-
 export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
+  const catalogue = useMemo(() => config?.catalogue || [], [config]);
+  const defaultToken = useMemo(() => {
+    if (!catalogue.length) {
+      return {
+        code: config?.supports_neno ? 'NENO' : config?.fallback_token || 'USDC',
+        network: 'bsc',
+        label: '',
+      };
+    }
+    return catalogue[0];
+  }, [catalogue, config]);
+
+  const [selectedToken, setSelectedToken] = useState(defaultToken);
   const [opening, setOpening] = useState(null);
   const [lastEvent, setLastEvent] = useState(null);
+
   const popupRef = useRef(null);
   const pollRef = useRef(null);
   const allowedOriginRef = useRef(STG_ORIGIN);
 
-  // Listen for postMessage events posted by the Transak popup window.
-  // The Transak widget calls window.opener.postMessage(...) on every
-  // lifecycle event — same payload shape as the SDK would surface.
+  // Keep the selected token in sync when the catalogue arrives.
+  useEffect(() => {
+    setSelectedToken(defaultToken);
+  }, [defaultToken]);
+
+  // Listen for postMessage events from the Transak popup window
   useEffect(() => {
     const handler = (event) => {
       if (event.origin !== allowedOriginRef.current) return;
       const data = event.data;
       if (!data || typeof data !== 'object') return;
-      // Transak events carry an `event_id` field like "TRANSAK_ORDER_SUCCESSFUL"
       const name = data.event_id || data.eventName || data.type;
-      if (!name || typeof name !== 'string' || !name.startsWith('TRANSAK_')) return;
-
+      if (!name || typeof name !== 'string' || !name.startsWith(TRACKED_EVENT_PREFIX)) return;
       setLastEvent({ name, at: new Date().toISOString() });
       onEvent?.(name, data);
       transakApi.logEvent(walletAddress, name, data).catch(() => {});
@@ -66,8 +81,6 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
     return () => window.removeEventListener('message', handler);
   }, [walletAddress, onEvent]);
 
-  // Poll for popup close — fires the synthetic TRANSAK_WIDGET_CLOSE
-  // event if the user dismisses the popup manually.
   const startCloseWatcher = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(() => {
@@ -78,9 +91,7 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
           const name = 'TRANSAK_WIDGET_CLOSE';
           setLastEvent({ name, at: new Date().toISOString() });
           onEvent?.(name, { reason: 'popup_closed' });
-          transakApi
-            .logEvent(walletAddress, name, { reason: 'popup_closed' })
-            .catch(() => {});
+          transakApi.logEvent(walletAddress, name, { reason: 'popup_closed' }).catch(() => {});
         }
         popupRef.current = null;
         setOpening(null);
@@ -88,23 +99,24 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
     }, 600);
   }, [walletAddress, onEvent]);
 
-  useEffect(() => () => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    if (popupRef.current && !popupRef.current.closed) {
-      try { popupRef.current.close(); } catch (_) {}
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (popupRef.current && !popupRef.current.closed) {
+        try { popupRef.current.close(); } catch (_) {}
+      }
+    },
+    []
+  );
 
   const launch = useCallback(
     (mode) => {
-      if (!walletAddress) return;
+      if (!walletAddress || !selectedToken) return;
       setOpening(mode);
-
-      const widgetUrl = buildWidgetUrl(config, walletAddress, PRODUCT_MAP[mode]);
+      const widgetUrl = buildWidgetUrl(config, walletAddress, PRODUCT_MAP[mode], selectedToken);
       allowedOriginRef.current =
         config.environment === 'PRODUCTION' ? PROD_ORIGIN : STG_ORIGIN;
 
-      // Re-focus existing popup if still open
       if (popupRef.current && !popupRef.current.closed) {
         try {
           popupRef.current.location.replace(widgetUrl);
@@ -117,7 +129,6 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
 
       const popup = window.open(widgetUrl, 'transak-widget', POPUP_FEATURES);
       if (!popup) {
-        // Browser blocked the popup — fall back to a same-tab navigation
         window.location.href = widgetUrl;
         return;
       }
@@ -125,40 +136,79 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
       try { popup.focus(); } catch (_) {}
       startCloseWatcher();
 
-      // Synthetic "launcher pressed" — useful for audit before Transak
-      // sends its own TRANSAK_WIDGET_INITIALISED
       const name = 'TRANSAK_WIDGET_LAUNCHED';
       setLastEvent({ name, at: new Date().toISOString() });
-      onEvent?.(name, { mode });
-      transakApi.logEvent(walletAddress, name, { mode }).catch(() => {});
+      onEvent?.(name, { mode, token: selectedToken });
+      transakApi
+        .logEvent(walletAddress, name, { mode, token: selectedToken })
+        .catch(() => {});
     },
-    [config, walletAddress, onEvent, startCloseWatcher]
+    [config, walletAddress, selectedToken, onEvent, startCloseWatcher]
   );
 
-  const disabled = !walletAddress || !isBSC;
-  const cryptoLabel = config?.supports_neno
-    ? 'NENO'
-    : `${config?.fallback_token || 'USDC'} (NENO listing pending on Transak staging)`;
+  // The token's network has to be reachable from the connected wallet.
+  // We disable the launch only when the user has no wallet at all.
+  // For BSC tokens we hint at switching networks; for others we just trust
+  // the user to flip chain inside their wallet if needed.
+  const isBscToken = selectedToken?.network === 'bsc';
+  const disabled = !walletAddress || (isBscToken && !isBSC);
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-6" data-testid="transak-launcher">
       <div className="flex items-baseline justify-between mb-1">
         <h2 className="text-white text-lg font-semibold">Step 2 — Trade through Transak</h2>
-        <span className="text-xs text-purple-300 uppercase tracking-wider">{config?.environment}</span>
+        <span className="text-xs text-purple-300 uppercase tracking-wider">
+          {config?.environment}
+        </span>
       </div>
+
       <p className="text-gray-300 text-sm mb-3">
-        Pair: <span className="font-mono text-purple-200">{cryptoLabel}</span> on{' '}
-        <span className="font-mono text-purple-200">{(config?.network || 'bsc').toUpperCase()}</span>{' '}
+        Token:{' '}
+        <span className="font-mono text-purple-200" data-testid="selected-token-label">
+          {selectedToken?.label || `${selectedToken?.code} · ${selectedToken?.network?.toUpperCase()}`}
+        </span>{' '}
         — fiat: <span className="font-mono text-purple-200">{config?.fiat_currency || 'EUR'}</span>
       </p>
+
+      <div className="mb-4">
+        <label className="block text-xs text-gray-400 mb-2">Pick a token</label>
+        <div className="flex flex-wrap gap-2" data-testid="token-picker">
+          {catalogue.map((token) => {
+            const isSelected =
+              selectedToken &&
+              selectedToken.code === token.code &&
+              selectedToken.network === token.network;
+            return (
+              <button
+                key={`${token.code}-${token.network}`}
+                onClick={() => setSelectedToken(token)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                  isSelected
+                    ? 'bg-purple-600 border-purple-500 text-white'
+                    : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10'
+                }`}
+                data-testid={`token-${token.code}-${token.network}`}
+              >
+                {token.label}
+              </button>
+            );
+          })}
+        </div>
+        {!config?.supports_neno && (
+          <p className="text-xs text-yellow-300/80 mt-2" data-testid="neno-pending-note">
+            NENO listing on Transak is pending — to add a custom token, file an "Add Custom Token"
+            request in the Transak Partner Dashboard with the contract{' '}
+            <span className="font-mono">{config?.neno_contract?.slice(0, 10)}…</span>.
+          </p>
+        )}
+      </div>
+
       <div className="flex items-start gap-2 text-xs text-gray-400 mb-5">
         <ExternalLink className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-purple-300" />
         <p>
-          Transak opens in a separate popup window — never an iframe inside this page. This
-          honours Transak's <code>frame-ancestors</code> policy <em>and</em> makes the
-          non-custodial boundary visually unambiguous: their KYC + payment rails run in their
-          own browser context, not embedded in ours. walletAddress is locked to the address you
-          connected above (<code>disableWalletAddressForm=true</code>).
+          Transak opens in a separate popup window — never an iframe inside this page.
+          walletAddress is locked to the address you connected above
+          (<code>disableWalletAddressForm=true</code>).
         </p>
       </div>
 
@@ -195,7 +245,7 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
       {disabled && (
         <p className="text-yellow-300 text-xs mt-4" data-testid="launcher-disabled-note">
           {walletAddress
-            ? 'Switch your wallet to BNB Smart Chain to enable Buy/Sell/Swap.'
+            ? 'Switch your wallet to BNB Smart Chain to trade this BSC token.'
             : 'Connect your wallet first to enable Buy/Sell/Swap.'}
         </p>
       )}
