@@ -40,8 +40,8 @@ non-custodial: **Onboarding → Connessione Wallet → Transak → Wallet → In
 | 8–18s | Passa sopra alle tre card dei pillar (User-initiated · No Fund Intermediation · Direct Delivery) | "Tre pillar: user-initiated only, no fund intermediation, direct delivery — resi visibili direttamente in pagina." |
 | 18–25s | Click su **Connect Wallet** → prompt di MetaMask → approva → appare la card verde "Wallet connected" | "Step 1: l'utente connette esplicitamente il proprio wallet. Questo indirizzo è l'unica destinazione su cui Transak consegnerà i fondi." |
 | 25–30s | Se la chain non è BSC, click su **Switch to BNB Smart Chain** | "Passiamo a BNB Smart Chain — la rete su cui vive NENO." |
-| 30–40s | Click su **Buy Crypto (On-Ramp)** → il widget Transak si apre con l'indirizzo pre-compilato e **disabilitato** | "Step 2: Buy. Il widget Transak si apre con l'indirizzo del wallet dell'utente, bloccato tramite `disableWalletAddressForm` — non possono ridirigere la consegna. Per ora il token è USDC su BSC; NENO sarà attivato non appena Transak whitelistarà il nostro contratto." |
-| 40–50s | Chiudi il widget. Click su **Sell Crypto (Off-Ramp)** → il widget riapre in modalità SELL | "Step 3: Sell. Stesso wallet, stesso lock. L'utente firma il trasferimento in uscita personalmente — NeoNoble non ha alcuna autorità di firma." |
+| 30–40s | Click su **Buy Crypto (On-Ramp)** → si **apre una nuova finestra popup** con il widget Transak: l'indirizzo del wallet è pre-compilato e **disabilitato** | "Step 2: Buy. Transak si apre in una popup separata — mai dentro un iframe — quindi il contesto KYC e pagamenti vive nel browser di Transak, non nel nostro. L'indirizzo del wallet dell'utente è bloccato tramite `disableWalletAddressForm`. Per ora il token è USDC su BSC; NENO sarà attivato non appena Transak whitelistarà il nostro contratto." |
+| 40–50s | Chiudi la popup. Click su **Sell Crypto (Off-Ramp)** → si riapre la popup in modalità SELL | "Step 3: Sell. Stesso wallet, stesso lock. L'utente firma il trasferimento in uscita personalmente dentro la popup Transak — NeoNoble non ha alcuna autorità di firma." |
 | 50–58s | Chiudi, poi click su **Swap (Buy/Sell)** → vedi entrambe le tab disponibili | "Step 4: una tab Swap unificata commuta tra BUY e SELL con `productsAvailed=BUY,SELL`." |
 | 58–70s | Scrolla fino alla card **Transak event stream** che mostra `TRANSAK_WIDGET_INITIALISED`, `…OPEN`, `…CLOSE` | "Ogni evento dell'SDK Transak è loggato client-side e inoltrato al nostro backend per audit — mai come trigger di trade." |
 | 70–75s | Apri la sezione collassata **Widget configuration** che rivela il JSON di config | "Ecco la config completa, sola lettura: ambiente STAGING, network BSC, fiat EUR, walletAddress = indirizzo dell'utente, `disableWalletAddressForm=true`. Fine." |
@@ -60,13 +60,18 @@ non-custodial: **Onboarding → Connessione Wallet → Transak → Wallet → In
 
 ## Imprevisti tipici durante la registrazione
 
+- **Popup bloccato dal browser:** Chrome/Edge bloccano la finestra al primo
+  tentativo. Click sull'icona "popup bloccato" nella barra dell'indirizzo →
+  consenti sempre per `neonoble-ramp.preview.emergentagent.com`, poi ri-clicca
+  Buy/Sell/Swap. (Lo script di fallback comunque ti naviga sulla stessa tab
+  se la popup viene rifiutata, così non vedi mai una pagina vuota.)
 - **No injected wallet detected:** la pagina mostra un warning giallo.
   Installa MetaMask e ricarica la pagina prima di registrare.
 - **I pulsanti restano grigi:** il wallet è connesso ma sulla rete sbagliata.
   Click su **Switch to BNB Smart Chain**.
 - **Il widget si apre con un token diverso:** il catalogo staging
   occasionalmente rimappa `cryptoCurrencyCode`. Verifica nell'URL dentro
-  l'iframe che ci sia `cryptoCurrencyCode=USDC` (o `NENO` una volta
+  la popup che ci sia `cryptoCurrencyCode=USDC` (o `NENO` una volta
   supportato). Se non c'è, cambia `TRANSAK_FALLBACK_TOKEN` in
   `backend/.env` con un altro token listato (es. `USDT`) e riavvia il backend.
 - **Errore `apiKey` non configurato:** manca `TRANSAK_API_KEY` in
