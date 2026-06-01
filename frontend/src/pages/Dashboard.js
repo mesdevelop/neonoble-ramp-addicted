@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePricing } from '../hooks/usePricing';
 import { useTransactions } from '../hooks/useTransactions';
-import { Coins, LogOut } from 'lucide-react';
+import { onboardingApi } from '../api';
+import { Coins, LogOut, ShieldCheck, ArrowRight } from 'lucide-react';
 import { PriceDisplay } from '../components/dashboard/PriceDisplay';
 import { TransactionList } from '../components/dashboard/TransactionList';
 import { RampPanel } from '../components/dashboard/RampPanel';
@@ -15,6 +16,11 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { prices, loading: loadingPrices, refresh: refreshPrices } = usePricing();
   const { transactions, refresh: refreshTransactions } = useTransactions();
+  const [kycStatus, setKycStatus] = useState(null);
+
+  useEffect(() => {
+    onboardingApi.myKyc().then((d) => setKycStatus(d?.status || 'NOT_STARTED')).catch(() => {});
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -68,6 +74,28 @@ export default function Dashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {kycStatus && kycStatus !== 'APPROVED' && (
+          <Link
+            to="/onboarding"
+            data-testid="kyc-onboarding-banner"
+            className="mb-6 rounded-2xl border border-purple-500/30 bg-purple-500/10 p-4 flex items-center gap-4 hover:bg-purple-500/20 transition-colors"
+          >
+            <ShieldCheck className="h-8 w-8 text-purple-300 flex-shrink-0" />
+            <div className="flex-1 text-sm">
+              <p className="font-semibold text-white">
+                {kycStatus === 'NOT_STARTED' && 'Complete identity verification to unlock trading'}
+                {kycStatus === 'PENDING' && 'Continue your KYC — upload your documents'}
+                {kycStatus === 'IN_REVIEW' && 'Your KYC is under review by our compliance team'}
+                {kycStatus === 'REJECTED' && 'Your KYC was rejected — view details'}
+                {kycStatus === 'ON_HOLD' && 'Your KYC is on hold — additional documents needed'}
+              </p>
+              <p className="text-purple-200/80 mt-0.5">
+                NeoNoble Ramp is a CASP under MiCAR — all customers must complete KYC.
+              </p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-purple-300" />
+          </Link>
+        )}
         <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4" data-testid="enterprise-otc-banner">
           <div className="flex items-start gap-3">
             <span className="inline-block bg-amber-500/30 text-amber-100 text-xs px-2 py-0.5 rounded font-semibold mt-0.5">

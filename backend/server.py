@@ -75,6 +75,7 @@ from routes.user_ramp import router as user_ramp_router, set_ramp_service
 from routes.webhooks import router as webhooks_router, set_payout_service as set_webhooks_payout_service
 from routes.transak import router as transak_router, set_transak_service
 from routes.casp import router as casp_router, set_services as set_casp_services
+from routes.onboarding import router as onboarding_router, set_services as set_onboarding_services
 from middleware.casp_rbac import bind_db as bind_casp_db
 
 # Initialize services

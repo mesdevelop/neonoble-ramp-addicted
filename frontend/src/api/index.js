@@ -252,4 +252,11 @@ export const caspApi = {
   verifyAudit: async () => (await api.get('/casp/audit/verify')).data,
 };
 
+// Customer Onboarding (KYC self-service)
+export const onboardingApi = {
+  myKyc: async () => (await api.get('/onboarding/my-kyc')).data,
+  startKyc: async (body) => (await api.post('/onboarding/kyc/start', body)).data,
+  uploadDocument: async (body) => (await api.post('/onboarding/kyc/document', body)).data,
+};
+
 export default api;

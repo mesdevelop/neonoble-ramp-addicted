@@ -15,6 +15,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import ChangePassword from "./pages/ChangePassword";
 import Admin from "./pages/Admin";
+import Onboarding from "./pages/Onboarding";
 
 // Protected Route Component
 function ProtectedRoute({ children, requireDeveloper = false }) {
@@ -128,6 +129,16 @@ function AppRoutes() {
 
       {/* CASP Admin Console */}
       <Route path="/admin/*" element={<Admin />} />
+
+      {/* Customer Onboarding (self-service KYC) */}
+      <Route
+        path="/onboarding"
+        element={
+          <ProtectedRoute>
+            <Onboarding />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Catch all - redirect to home */}
       <Route path="*" element={<Navigate to="/" replace />} />
