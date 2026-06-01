@@ -495,3 +495,39 @@ async def trp_decision(trp_id: str, body: TrpDecisionReq,
     if result.get("error"):
         raise HTTPException(status_code=404, detail=result)
     return result
+
+
+# ── Real-mode Setup Wizard ─────────────────────────────────────────────────
+
+
+@router.get("/setup/status")
+async def setup_status(actor: dict = Depends(require_any_admin)):
+    return await _casp.live_mode_status()
+
+
+class LegalEntityReq(BaseModel):
+    legal_name: str
+    license_number: str
+    license_authority: str  # e.g. "CONSOB" or "Banca d'Italia"
+    license_valid_until: str  # ISO date
+    registered_address: str
+    vat_number: Optional[str] = None
+    lei: Optional[str] = None
+    contact_email: EmailStr
+    contact_phone: Optional[str] = None
+    mlro_name: Optional[str] = None
+
+
+@router.post("/setup/legal-entity")
+async def setup_legal_entity(body: LegalEntityReq, actor: dict = Depends(require_any_admin)):
+    if actor.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Only super-admin can register legal entity")
+    return await _casp.save_legal_entity(body.model_dump(), actor)
+
+
+@router.post("/setup/mark-demo-wiped")
+async def setup_mark_wiped(actor: dict = Depends(require_any_admin)):
+    if actor.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Only super-admin can mark demo wiped")
+    await _casp.mark_demo_wiped(actor)
+    return {"ok": True}

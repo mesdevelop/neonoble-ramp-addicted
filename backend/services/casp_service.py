@@ -862,3 +862,99 @@ class CaspService:
         )
         doc.pop("_id", None)
         return doc
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Real-mode setup wizard helpers
+    # ─────────────────────────────────────────────────────────────────────
+
+    async def live_mode_status(self) -> Dict[str, Any]:
+        """Aggregate everything the Setup Wizard needs to display."""
+        from services.casp.internal.sanctions_data import OFAC_SANCTIONED_CRYPTO
+
+        capital = await self.db.casp_capital_snapshots.find_one(
+            {}, sort=[("snapshot_date", -1)], projection={"_id": 0}
+        )
+        cfg = await self.db.casp_config.find_one({"id": "live"}, {"_id": 0}) or {}
+        wallets_count = await self.db.casp_wallets.count_documents({})
+        kyc_done = await self.db.casp_kyc.count_documents({"status": "APPROVED"})
+        vasps_count = await self.db.casp_vasp_directory.count_documents({})
+
+        env_flags = {
+            "CASP_LIVE_MODE": os.environ.get("CASP_LIVE_MODE", "false").lower() == "true",
+            "CASP_AUTONOMOUS_MODE": os.environ.get("CASP_AUTONOMOUS_MODE", "true").lower() == "true",
+            "TRANSAK_LIVE": bool(os.environ.get("TRANSAK_API_KEY"))
+                and os.environ.get("TRANSAK_ENV", "STAGING").upper() == "PRODUCTION",
+            "STRIPE_LIVE": (os.environ.get("STRIPE_SECRET_KEY") or "").startswith("sk_live_"),
+            "TRP_SIGNING_SECRET_SET": bool(
+                os.environ.get("NEONOBLE_TRP_SIGNING_SECRET")
+                and "dev-only" not in os.environ.get("NEONOBLE_TRP_SIGNING_SECRET", "")
+            ),
+            "NEONOBLE_VASP_DID": os.environ.get("NEONOBLE_VASP_DID", ""),
+        }
+
+        steps = [
+            {
+                "id": 1, "title": "Wipe demo data & enable live mode",
+                "done": cfg.get("demo_wiped") is True,
+                "details": "Removes seed clients, demo wallets, fake VASPs.",
+            },
+            {
+                "id": 2, "title": "Legal-entity identity (CASP license)",
+                "done": bool(cfg.get("legal_entity", {}).get("license_number")),
+                "details": "Records license number, authority, valid-until date.",
+            },
+            {
+                "id": 3, "title": "Capital adequacy snapshot (own funds)",
+                "done": capital is not None and capital.get("status") == "COMPLIANT",
+                "details": f"Class {capital.get('casp_class', '?')} — €{capital.get('own_funds_eur', 0):,.0f} / €{capital.get('required_capital_eur', 0):,.0f}" if capital else "Not configured",
+            },
+            {
+                "id": 4, "title": "TRP signing secret rotated",
+                "done": env_flags["TRP_SIGNING_SECRET_SET"],
+                "details": "Strong secret used to sign outbound IVMS-101 messages.",
+            },
+            {
+                "id": 5, "title": "Transak production keys",
+                "done": env_flags["TRANSAK_LIVE"],
+                "details": "Requires Rahul Das (Transak) to lift the KYB on-hold first.",
+            },
+        ]
+        completed = sum(1 for s in steps if s["done"])
+        return {
+            "live_mode": env_flags["CASP_LIVE_MODE"],
+            "autonomous": env_flags["CASP_AUTONOMOUS_MODE"],
+            "completeness_pct": round(100 * completed / len(steps)),
+            "steps": steps,
+            "env_flags": env_flags,
+            "data_counts": {
+                "wallets": wallets_count,
+                "kyc_approved": kyc_done,
+                "peer_vasps": vasps_count,
+            },
+            "config": cfg,
+        }
+
+    async def save_legal_entity(self, body: Dict[str, Any], actor: Dict[str, Any]) -> Dict[str, Any]:
+        cfg = await self.db.casp_config.find_one({"id": "live"}) or {"id": "live"}
+        cfg["legal_entity"] = body
+        cfg["updated_at"] = datetime.now(timezone.utc)
+        await self.db.casp_config.replace_one({"id": "live"}, cfg, upsert=True)
+        await self.audit.append(
+            actor_id=actor.get("user_id"), actor_email=actor.get("email"),
+            action="LEGAL_ENTITY_REGISTERED", entity_type="CaspConfig", entity_id="live",
+            payload={"legal_name": body.get("legal_name"), "license_number": body.get("license_number")},
+        )
+        cfg.pop("_id", None)
+        return cfg
+
+    async def mark_demo_wiped(self, actor: Dict[str, Any]) -> None:
+        await self.db.casp_config.update_one(
+            {"id": "live"},
+            {"$set": {"demo_wiped": True, "demo_wiped_at": datetime.now(timezone.utc),
+                      "demo_wiped_by": actor.get("user_id")}},
+            upsert=True,
+        )
+        await self.audit.append(
+            actor_id=actor.get("user_id"), actor_email=actor.get("email"),
+            action="DEMO_DATA_WIPED", entity_type="CaspConfig", entity_id="live", payload={},
+        )

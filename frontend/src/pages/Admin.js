@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AdminLayout from '../components/admin/AdminLayout';
+import SetupWizard from '../components/admin/SetupWizard';
 import { caspApi } from '../api';
 import { Card, SectionHeader, DataTable, Pill, severityTone, statusTone, formatEur, formatDateTime } from '../components/admin/ui';
 import { useAuth } from '../context/AuthContext';
@@ -12,13 +13,15 @@ import { toast } from 'sonner';
 function DashboardPage() {
   const [kpi, setKpi] = useState(null);
   const [audit, setAudit] = useState(null);
+  const [setup, setSetup] = useState(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const [d, a] = await Promise.all([caspApi.dashboard(), caspApi.verifyAudit()]);
-        setKpi(d);
-        setAudit(a);
+        const [d, a, s] = await Promise.all([
+          caspApi.dashboard(), caspApi.verifyAudit(), caspApi.setupStatus(),
+        ]);
+        setKpi(d); setAudit(a); setSetup(s);
       } catch (e) { toast.error('Failed to load dashboard'); }
     })();
   }, []);
@@ -32,6 +35,21 @@ function DashboardPage() {
         subtitle="Real-time KPIs across all 7 MiCAR operational blocks."
         actions={<Pill tone="green">AUTONOMOUS · No third-party dependency</Pill>}
       />
+
+      {setup && setup.completeness_pct < 100 && (
+        <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 flex items-center justify-between">
+          <div>
+            <div className="text-sm text-amber-200 font-semibold">Setup not yet complete</div>
+            <div className="text-xs text-amber-100/80">
+              {setup.completeness_pct}% done · {5 - setup.steps.filter(s => s.done).length} steps remaining
+            </div>
+          </div>
+          <a href="/admin/setup" className="px-3 py-1.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/40 text-sm hover:bg-amber-500/30">
+            Open Setup Wizard →
+          </a>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <Card testId="kpi-kyc-pending" title="KYC Pending" value={kpi.kyc.pending} hint={`${kpi.kyc.approved} approved`} tone="amber" />
         <Card testId="kpi-aml-open" title="AML Open Alerts" value={kpi.aml.open_alerts} hint={`${kpi.aml.critical} critical`} tone="red" />
@@ -839,6 +857,7 @@ export default function Admin() {
     <AdminLayout>
       <Routes>
         <Route index element={<DashboardPage />} />
+        <Route path="setup" element={<SetupWizard />} />
         <Route path="compliance" element={<CompliancePage />} />
         <Route path="aml" element={<AmlPage />} />
         <Route path="treasury" element={<TreasuryPage />} />

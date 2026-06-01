@@ -231,6 +231,10 @@ export const caspApi = {
   deleteVasp: async (did) => (await api.delete(`/casp/trp/vasps/${encodeURIComponent(did)}`)).data,
   uploadKycDocument: async (kycId, body) => (await api.post(`/casp/kyc/${kycId}/documents`, body)).data,
   listKycDocuments: async (kycId) => (await api.get(`/casp/kyc/${kycId}/documents`)).data,
+  // Setup wizard (live mode)
+  setupStatus: async () => (await api.get('/casp/setup/status')).data,
+  setupLegalEntity: async (body) => (await api.post('/casp/setup/legal-entity', body)).data,
+  setupMarkWiped: async () => (await api.post('/casp/setup/mark-demo-wiped')).data,
   // Block 6
   listComplaints: async (status) =>
     (await api.get('/casp/complaints', { params: { status } })).data,

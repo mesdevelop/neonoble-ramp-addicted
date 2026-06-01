@@ -2,12 +2,13 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShieldCheck, AlertTriangle, Wallet, TrendingUp,
-  FileText, MessageSquare, Users2, ScrollText, LogOut, Building2, Cpu,
+  FileText, MessageSquare, Users2, ScrollText, LogOut, Building2, Cpu, Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const NAV = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
+  { to: '/admin/setup', label: 'Setup Wizard', icon: Sparkles },
   { to: '/admin/compliance', label: 'KYC / KYB', icon: ShieldCheck },
   { to: '/admin/aml', label: 'AML & Alerts', icon: AlertTriangle },
   { to: '/admin/treasury', label: 'Treasury', icon: Wallet },
