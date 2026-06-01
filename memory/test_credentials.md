@@ -37,9 +37,10 @@ curl -X POST "$API_URL/api/auth/register" \
 ```
 
 ## External integrations not yet configured (require user action)
-- `TRANSAK_API_KEY` / `TRANSAK_API_SECRET` (Production) — pending Rahul Das KYB approval
-- `STRIPE_SECRET_KEY` (live `sk_live_…`) — pending user action
-- `RESEND_API_KEY` — empty by design, emails fall back to console logging
+- `TRANSAK_API_KEY` / `TRANSAK_API_SECRET` (Production) — pending Rahul Das KYB approval. **Developer/staging key now active** (`e2bec76f-…`) with `TRANSAK_ENVIRONMENT=STAGING`.
+- `STRIPE_SECRET_KEY` (live `sk_live_…`) — **configured 2026-06-01** ✅
+- `STRIPE_WEBHOOK_SECRET` — pending (run `stripe listen` in your terminal to obtain `whsec_…`)
+- `RESEND_API_KEY` — **configured** ✅ (domain `neonoble-ramp.com` verified per user)
 
 ## Re-seed CASP if needed
 ```bash

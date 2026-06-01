@@ -108,7 +108,7 @@ Build a full-stack on/off-ramp platform for the **NeoNoble Ramp** product
 - **CONSOB technical brief** at `/app/CASP_CONSOB_BRIEF.md` (EN + IT).
 - Testing: 36/36 pytest + 6/6 frontend (iteration_5.json).
 
-### Iteration 6 (current — CASP Autonomous Mode, 2026-05-31)
+## Iteration 6 (CASP Autonomous Mode, 2026-05-31)
 - **`CASP_AUTONOMOUS_MODE=true`** flag (default ON) — the CaspService
   factory selects in-house adapters under `services/casp/internal/`
   instead of Sumsub / Chainalysis / Fireblocks / Notabene.
@@ -142,19 +142,53 @@ Build a full-stack on/off-ramp platform for the **NeoNoble Ramp** product
   Tornado Cash → `risk_score: 100, is_critical: true, categories: [sanctions]`,
   inbound TRP HMAC verification works, audit chain 43 entries verified.
 
+### Iteration 7 (current — First Customer Onboarding Flow + live keys, 2026-06-01)
+- **Public self-service KYC flow** at `/onboarding` — protected route, 4-step
+  stepper (Personal Info → ID Document → Selfie → Status) with retail-grade
+  data-testid hooks for testing.
+- **New backend endpoints** (all auth-required, no CASP role needed because
+  the user acts on their own behalf):
+  * `GET /api/onboarding/my-kyc` — returns the calling user's KYC status
+  * `POST /api/onboarding/kyc/start` — initiate a `casp_kyc` record with
+    personal info (full_name, DOB, nationality, country, document_type)
+  * `POST /api/onboarding/kyc/document` — upload base64 documents
+    (ID_FRONT, ID_BACK, SELFIE, POA) with size limit ~6 MB; transitions
+    KYC status to IN_REVIEW
+- **Dashboard banner** (`data-testid=kyc-onboarding-banner`) prompts the
+  customer to complete KYC when status is NOT_STARTED / PENDING / IN_REVIEW
+  / REJECTED / ON_HOLD, hides on APPROVED.
+- **End-to-end loop** validated: customer submits → record appears in
+  `/admin/compliance` MLRO queue → MLRO approves → status flows back to the
+  customer's `/onboarding` page as APPROVED.
+- **.env updates** (live mode):
+  * `STRIPE_SECRET_KEY=sk_live_...` + `STRIPE_PUBLISHABLE_KEY=pk_live_...`
+  * `TRANSAK_API_KEY=e2bec76f-...` (developer/staging key) with
+    `TRANSAK_ENVIRONMENT=STAGING` and `TRANSAK_ENV=STAGING` — production
+    keys still blocked on Rahul Das (Transak compliance).
+* Resend domain `neonoble-ramp.com` confirmed verified by the user;
+  email delivery to arbitrary addresses now unblocked.
+- Tests: 14/14 pytest in `backend/tests/test_onboarding.py` + Playwright
+  smoke (banner shows, stepper navigates, redirect to /login when unauth).
+  Regression confirmed for `/api/transak/widget-url`,
+  `/api/casp/dashboard`, `/api/auth/login`.
+
+## Iteration 6 (CASP Autonomous Mode, 2026-05-31)
+
 ## Backlog
 
 ### P0 — Pending external action
 - 🚨 **Reply to Transak compliance (Rahul Das)** — copy-paste the email body
   from `/app/TRANSAK_COMPLIANCE_REPLY.md` (English version) into Rahul's
-  thread of 20/05/2026 to lift the KYB "on hold" status.
-- 🌐 **Verify `neonoble-ramp.com` on Resend** (5 min) → unlock email
-  delivery to arbitrary recipients (not just verified ones).
+  thread of 20/05/2026 to lift the KYB "on hold" status (unlocks the
+  production Transak key — staging now active).
 - 🆔 **Submit NENO Asset Listing request** to Transak Partner Dashboard
   with contract `0xeF3F5C1892A8d7A3304E4A15959E124402d69974`.
 - 🎬 **Record the Transak compliance video** locally using `/transak` +
   `TRANSAK_DEMO_WALKTHROUGH_IT.md` (cannot be done by the AI agent).
-- 🔑 Live Stripe keys (carried over).
+- 🔑 **Stripe webhook secret** (`whsec_…`) — get from Stripe CLI / dashboard
+  and add to `.env` to verify webhook signatures (live keys already in `.env`).
+- ✅ ~~Verify `neonoble-ramp.com` on Resend~~ — DONE 2026-06-01
+- ✅ ~~Live Stripe keys~~ — DONE 2026-06-01
 - 🤝 **CASP Sprint 2 — Sumsub onboarding**: provide partner API keys to
   flip Sumsub adapter to LIVE (`SUMSUB_LIVE=true` + tokens in `.env`).
 
