@@ -104,6 +104,7 @@ set_webhooks_payout_service(payout_service)
 set_transak_service(transak_service)
 set_email_service(email_service)
 set_casp_services(casp_service, audit_log_service)
+set_onboarding_services(casp_service)
 
 # Background task for blockchain monitoring
 blockchain_poll_task = None
@@ -255,6 +256,7 @@ api_router.include_router(user_ramp_router)
 api_router.include_router(webhooks_router)
 api_router.include_router(transak_router)
 api_router.include_router(casp_router)
+api_router.include_router(onboarding_router)
 
 # Include the main router
 app.include_router(api_router)
