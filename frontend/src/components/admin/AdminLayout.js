@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShieldCheck, AlertTriangle, Wallet, TrendingUp,
-  FileText, MessageSquare, Users2, ScrollText, LogOut, Building2, Cpu, Sparkles,
+  FileText, MessageSquare, Users2, ScrollText, LogOut, Building2, Cpu, Sparkles, AlertOctagon,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { caspApi } from '../../api';
 
 const NAV = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -23,6 +24,13 @@ const NAV = [
 export default function AdminLayout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [pitchMode, setPitchMode] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try { const s = await caspApi.setupStatus(); setPitchMode(!!s.pitch_mode); } catch {}
+    })();
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -84,6 +92,14 @@ export default function AdminLayout({ children }) {
 
       {/* Main */}
       <div className="pl-64">
+        {pitchMode && (
+          <div className="sticky top-0 z-30 bg-rose-600/90 backdrop-blur-sm text-white text-xs px-6 py-2 flex items-center justify-center gap-2 border-b border-rose-400"
+               data-testid="pitch-mode-banner">
+            <AlertOctagon className="h-4 w-4" />
+            <span className="font-semibold tracking-wide">PITCH MODE — DEMO DATA, NOT VALID FOR REGULATORY USE</span>
+            <span className="opacity-75">· Set CASP_PITCH_MODE=false in backend/.env to disable</span>
+          </div>
+        )}
         <header className="sticky top-0 z-20 border-b border-slate-800 bg-[#0a0f1c]/80 backdrop-blur-md">
           <div className="px-8 py-4 flex items-center justify-between">
             <div>

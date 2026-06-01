@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import AdminLayout from '../components/admin/AdminLayout';
 import SetupWizard from '../components/admin/SetupWizard';
+import AdminWalkthrough from '../components/admin/AdminWalkthrough';
 import { caspApi } from '../api';
 import { Card, SectionHeader, DataTable, Pill, severityTone, statusTone, formatEur, formatDateTime } from '../components/admin/ui';
 import { useAuth } from '../context/AuthContext';
@@ -14,6 +15,7 @@ function DashboardPage() {
   const [kpi, setKpi] = useState(null);
   const [audit, setAudit] = useState(null);
   const [setup, setSetup] = useState(null);
+  const [forceTour, setForceTour] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -30,10 +32,22 @@ function DashboardPage() {
 
   return (
     <div data-testid="admin-dashboard">
+      <AdminWalkthrough force={forceTour} onClose={() => setForceTour(false)} />
       <SectionHeader
         title="CASP Operations Dashboard"
         subtitle="Real-time KPIs across all 7 MiCAR operational blocks."
-        actions={<Pill tone="green">AUTONOMOUS · No third-party dependency</Pill>}
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              data-testid="replay-tour-btn"
+              onClick={() => setForceTour(true)}
+              className="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700 hover:border-amber-400/40 hover:text-amber-300"
+            >
+              ▶ Replay tour
+            </button>
+            <Pill tone="green">AUTONOMOUS · No third-party dependency</Pill>
+          </div>
+        }
       />
 
       {setup && setup.completeness_pct < 100 && (

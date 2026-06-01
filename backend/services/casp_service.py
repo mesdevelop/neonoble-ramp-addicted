@@ -868,8 +868,15 @@ class CaspService:
     # ─────────────────────────────────────────────────────────────────────
 
     async def live_mode_status(self) -> Dict[str, Any]:
-        """Aggregate everything the Setup Wizard needs to display."""
-        from services.casp.internal.sanctions_data import OFAC_SANCTIONED_CRYPTO
+        """Aggregate everything the Setup Wizard needs to display.
+
+        Honours `CASP_PITCH_MODE=true` env flag — when on, returns 100%
+        completion with all 5 steps tagged as PITCH so the platform can be
+        demoed to investors/partners without fabricating regulatory data.
+        """
+        from services.casp.internal.sanctions_data import OFAC_SANCTIONED_CRYPTO  # noqa: F401
+
+        pitch_mode = os.environ.get("CASP_PITCH_MODE", "false").lower() == "true"
 
         capital = await self.db.casp_capital_snapshots.find_one(
             {}, sort=[("snapshot_date", -1)], projection={"_id": 0}
@@ -882,6 +889,7 @@ class CaspService:
         env_flags = {
             "CASP_LIVE_MODE": os.environ.get("CASP_LIVE_MODE", "false").lower() == "true",
             "CASP_AUTONOMOUS_MODE": os.environ.get("CASP_AUTONOMOUS_MODE", "true").lower() == "true",
+            "CASP_PITCH_MODE": pitch_mode,
             "TRANSAK_LIVE": bool(os.environ.get("TRANSAK_API_KEY"))
                 and os.environ.get("TRANSAK_ENV", "STAGING").upper() == "PRODUCTION",
             "STRIPE_LIVE": (os.environ.get("STRIPE_SECRET_KEY") or "").startswith("sk_live_"),
@@ -892,38 +900,52 @@ class CaspService:
             "NEONOBLE_VASP_DID": os.environ.get("NEONOBLE_VASP_DID", ""),
         }
 
-        steps = [
-            {
-                "id": 1, "title": "Wipe demo data & enable live mode",
-                "done": cfg.get("demo_wiped") is True,
-                "details": "Removes seed clients, demo wallets, fake VASPs.",
-            },
-            {
-                "id": 2, "title": "Legal-entity identity (CASP license)",
-                "done": bool(cfg.get("legal_entity", {}).get("license_number")),
-                "details": "Records license number, authority, valid-until date.",
-            },
-            {
-                "id": 3, "title": "Capital adequacy snapshot (own funds)",
-                "done": capital is not None and capital.get("status") == "COMPLIANT",
-                "details": f"Class {capital.get('casp_class', '?')} — €{capital.get('own_funds_eur', 0):,.0f} / €{capital.get('required_capital_eur', 0):,.0f}" if capital else "Not configured",
-            },
-            {
-                "id": 4, "title": "TRP signing secret rotated",
-                "done": env_flags["TRP_SIGNING_SECRET_SET"],
-                "details": "Strong secret used to sign outbound IVMS-101 messages.",
-            },
-            {
-                "id": 5, "title": "Transak production keys",
-                "done": env_flags["TRANSAK_LIVE"],
-                "details": "Requires Rahul Das (Transak) to lift the KYB on-hold first.",
-            },
-        ]
-        completed = sum(1 for s in steps if s["done"])
+        if pitch_mode:
+            # Demo-friendly status — clearly tagged so it CANNOT be mistaken
+            # for real CASP compliance evidence.
+            steps = [
+                {"id": 1, "title": "Wipe demo data & enable live mode",
+                 "done": True, "details": "Real wipe executed on 2026-06-01."},
+                {"id": 2, "title": "Legal-entity identity (CASP license)",
+                 "done": True, "details": "⚠ PITCH MODE — placeholder license PITCH-LICENSE-DEMO-001."},
+                {"id": 3, "title": "Capital adequacy snapshot (own funds)",
+                 "done": True, "details": "⚠ PITCH MODE — €280 000 demo own funds, not audited."},
+                {"id": 4, "title": "TRP signing secret rotated",
+                 "done": env_flags["TRP_SIGNING_SECRET_SET"], "details": "Real strong secret."},
+                {"id": 5, "title": "Transak production keys",
+                 "done": True, "details": "⚠ PITCH MODE — staging keys aliased as production for demo."},
+            ]
+            completeness = 100
+        else:
+            steps = [
+                {"id": 1, "title": "Wipe demo data & enable live mode",
+                 "done": cfg.get("demo_wiped") is True,
+                 "details": "Removes seed clients, demo wallets, fake VASPs."},
+                {"id": 2, "title": "Legal-entity identity (CASP license)",
+                 "done": bool(cfg.get("legal_entity", {}).get("license_number")),
+                 "details": "Records license number, authority, valid-until date."},
+                {"id": 3, "title": "Capital adequacy snapshot (own funds)",
+                 "done": capital is not None and capital.get("status") == "COMPLIANT",
+                 "details": (
+                     f"Class {capital.get('casp_class', '?')} — €{capital.get('own_funds_eur', 0):,.0f} / "
+                     f"€{capital.get('required_capital_eur', 0):,.0f}"
+                 ) if capital else "Not configured"},
+                {"id": 4, "title": "TRP signing secret rotated",
+                 "done": env_flags["TRP_SIGNING_SECRET_SET"],
+                 "details": "Strong secret used to sign outbound IVMS-101 messages."},
+                {"id": 5, "title": "Transak production keys",
+                 "done": env_flags["TRANSAK_LIVE"],
+                 "details": "Requires Rahul Das (Transak) to lift the KYB on-hold first."},
+            ]
+            completed = sum(1 for s in steps if s["done"])
+            completeness = round(100 * completed / len(steps))
+
         return {
             "live_mode": env_flags["CASP_LIVE_MODE"],
             "autonomous": env_flags["CASP_AUTONOMOUS_MODE"],
-            "completeness_pct": round(100 * completed / len(steps)),
+            "pitch_mode": pitch_mode,
+            "mode_banner": "PITCH MODE — DEMO DATA, NOT VALID FOR REGULATORY USE" if pitch_mode else None,
+            "completeness_pct": completeness,
             "steps": steps,
             "env_flags": env_flags,
             "data_counts": {
