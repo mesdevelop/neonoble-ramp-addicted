@@ -143,6 +143,30 @@ class TransakService:
                     err = r.json()
                 except Exception:
                     err = {"raw": r.text}
+                # KYB-not-approved is a known state while Transak compliance reviews
+                # our account — surface it cleanly instead of generic 502.
+                err_text = str(err).lower()
+                kyb_pending = (
+                    "kyb" in err_text and "approved" in err_text
+                ) or (
+                    # Production widget-gateway returns this opaque error when the
+                    # /partners/api/v2/refresh-token succeeded (so the API key+secret
+                    # ARE valid) but the account is not yet provisioned for widget
+                    # session creation — i.e. KYB still on hold upstream.
+                    r.status_code == 401 and (
+                        "errorcode': 1002" in err_text
+                        or "errorcode': 1014" in err_text
+                        or '"errorcode":1002' in err_text
+                        or '"errorcode":1014' in err_text
+                    )
+                )
+                if kyb_pending:
+                    raise RuntimeError(
+                        "TRANSAK_KYB_PENDING: API credentials are valid but the "
+                        "Transak account is not yet provisioned for widget session "
+                        "creation (KYB on hold). Reply to Rahul Das / email "
+                        "support@transak.com to lift the on-hold status."
+                    )
                 raise RuntimeError(
                     f"Transak rejected widget session (HTTP {r.status_code}): {err}"
                 )

@@ -104,7 +104,12 @@ async def create_widget_url(request: CreateWidgetUrlRequest):
     try:
         result = await transak_service.create_widget_url(params)
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        msg = str(e)
+        # 409 Conflict — the upstream account is in a state that needs
+        # external action (KYB approval). Frontend can show a clear banner.
+        if msg.startswith("TRANSAK_KYB_PENDING"):
+            raise HTTPException(status_code=409, detail=msg)
+        raise HTTPException(status_code=502, detail=msg)
     except Exception as e:
         logger.exception("Failed to create Transak widget URL")
         raise HTTPException(status_code=500, detail=f"Internal error: {e}")
