@@ -582,6 +582,11 @@ function AutonomyPage() {
   const [inbox, setInbox] = useState([]);
   const [testAddr, setTestAddr] = useState('0x8589427373d6d84e98730d7795d8f6f8731fda16');
   const [testResult, setTestResult] = useState(null);
+  const [showVaspForm, setShowVaspForm] = useState(false);
+  const [vaspForm, setVaspForm] = useState({
+    did: '', name: '', trp_endpoint: '',
+    known_addresses: '', shared_secret: '',
+  });
 
   const reload = async () => {
     try {
@@ -602,6 +607,40 @@ function AutonomyPage() {
       const r = await caspApi.screenAddress({ address: testAddr, asset: 'USDC', chain: 'BSC' });
       setTestResult(r);
     } catch { toast.error('Screen failed'); }
+  };
+
+  const submitVasp = async () => {
+    if (!vaspForm.did || !vaspForm.name || !vaspForm.trp_endpoint || !vaspForm.shared_secret) {
+      toast.error('DID, name, TRP endpoint and shared secret are required');
+      return;
+    }
+    try {
+      await caspApi.upsertVasp({
+        ...vaspForm,
+        known_addresses: vaspForm.known_addresses
+          .split(/[\s,]+/).map(a => a.trim()).filter(Boolean),
+      });
+      toast.success(`VASP ${vaspForm.name} saved`);
+      setShowVaspForm(false);
+      setVaspForm({ did: '', name: '', trp_endpoint: '', known_addresses: '', shared_secret: '' });
+      reload();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Save failed');
+    }
+  };
+
+  const removeVasp = async (did) => {
+    if (!window.confirm(`Remove VASP ${did}?`)) return;
+    try { await caspApi.deleteVasp(did); toast.success('VASP removed'); reload(); }
+    catch { toast.error('Delete failed'); }
+  };
+
+  const decideTrp = async (id, decision) => {
+    try {
+      await caspApi.decideTrpInbox(id, decision, `${decision} via admin console`);
+      toast.success(`Travel Rule message ${decision}ED`);
+      reload();
+    } catch { toast.error('Decision failed'); }
   };
 
   return (
@@ -666,13 +705,82 @@ function AutonomyPage() {
         </div>
       </div>
 
-      <h2 className="text-sm font-semibold text-slate-200 mb-3">Peer VASP Directory (Travel Rule)</h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-slate-200">Peer VASP Directory (Travel Rule)</h2>
+        <button
+          data-testid="vasp-new-btn"
+          onClick={() => setShowVaspForm((v) => !v)}
+          className="text-xs px-3 py-1.5 rounded bg-amber-400/10 text-amber-300 border border-amber-400/30 hover:bg-amber-400/20"
+        >
+          {showVaspForm ? 'Cancel' : '+ Add VASP'}
+        </button>
+      </div>
+
+      {showVaspForm && (
+        <div className="mb-4 rounded-lg border border-amber-400/20 bg-amber-400/5 p-4" data-testid="vasp-form">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            <input
+              data-testid="vasp-form-did" placeholder="DID — e.g. did:web:binance.com"
+              value={vaspForm.did}
+              onChange={(e) => setVaspForm({ ...vaspForm, did: e.target.value })}
+              className="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 font-mono"
+            />
+            <input
+              data-testid="vasp-form-name" placeholder="VASP name — e.g. Binance"
+              value={vaspForm.name}
+              onChange={(e) => setVaspForm({ ...vaspForm, name: e.target.value })}
+              className="bg-slate-900 border border-slate-700 rounded px-3 py-1.5"
+            />
+            <input
+              data-testid="vasp-form-endpoint" placeholder="TRP endpoint — https://… /trp/inbox"
+              value={vaspForm.trp_endpoint}
+              onChange={(e) => setVaspForm({ ...vaspForm, trp_endpoint: e.target.value })}
+              className="md:col-span-2 bg-slate-900 border border-slate-700 rounded px-3 py-1.5 font-mono"
+            />
+            <input
+              data-testid="vasp-form-addresses" placeholder="Known wallet addresses (comma-separated)"
+              value={vaspForm.known_addresses}
+              onChange={(e) => setVaspForm({ ...vaspForm, known_addresses: e.target.value })}
+              className="md:col-span-2 bg-slate-900 border border-slate-700 rounded px-3 py-1.5 font-mono"
+            />
+            <input
+              data-testid="vasp-form-secret"
+              type="password" placeholder="Shared HMAC secret (exchange via secure channel!)"
+              value={vaspForm.shared_secret}
+              onChange={(e) => setVaspForm({ ...vaspForm, shared_secret: e.target.value })}
+              className="md:col-span-2 bg-slate-900 border border-rose-500/30 rounded px-3 py-1.5"
+            />
+          </div>
+          <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+            <span>🔐 The shared secret is never displayed back in the list. Store it securely.</span>
+            <button
+              data-testid="vasp-form-submit"
+              onClick={submitVasp}
+              className="px-3 py-1.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20"
+            >
+              Save VASP
+            </button>
+          </div>
+        </div>
+      )}
+
       <DataTable testId="autonomy-vasps" rows={vasps} columns={[
         { key: 'name', label: 'VASP' },
         { key: 'did', label: 'DID', render: (r) => <code className="text-xs text-slate-400">{r.did}</code> },
         { key: 'trp_endpoint', label: 'TRP Endpoint', render: (r) => <code className="text-xs text-slate-400">{r.trp_endpoint}</code> },
         { key: 'known_addresses', label: 'Known Addrs', render: (r) => <span className="font-mono text-xs">{r.known_addresses?.length || 0}</span> },
         { key: 'verified', label: 'Verified', render: (r) => <Pill tone={r.verified ? 'green' : 'yellow'}>{r.verified ? 'YES' : 'NO'}</Pill> },
+        {
+          key: 'a', label: 'Action', render: (r) => (
+            <button
+              data-testid={`vasp-delete-${r.did}`}
+              onClick={() => removeVasp(r.did)}
+              className="text-xs px-2 py-1 rounded bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20"
+            >
+              Remove
+            </button>
+          ),
+        },
       ]} />
 
       <h2 className="text-sm font-semibold text-slate-200 mt-8 mb-3">Inbound Travel Rule Messages</h2>
@@ -683,6 +791,26 @@ function AutonomyPage() {
         { key: 'status', label: 'Status', render: (r) => <Pill tone={statusTone(r.status)}>{r.status}</Pill> },
         { key: 'asset', label: 'Asset', render: (r) => r.payload?.transfer?.asset || '—' },
         { key: 'amount_eur', label: 'EUR', render: (r) => formatEur(r.payload?.transfer?.amount_eur) },
+        {
+          key: 'a', label: 'Action', render: (r) => r.status === 'PENDING_REVIEW' ? (
+            <div className="flex gap-2">
+              <button
+                data-testid={`trp-accept-${r.id}`}
+                onClick={() => decideTrp(r.id, 'ACCEPT')}
+                className="text-xs px-2 py-1 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20"
+              >
+                Accept
+              </button>
+              <button
+                data-testid={`trp-reject-${r.id}`}
+                onClick={() => decideTrp(r.id, 'REJECT')}
+                className="text-xs px-2 py-1 rounded bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20"
+              >
+                Reject
+              </button>
+            </div>
+          ) : <span className="text-slate-600 text-xs">—</span>,
+        },
       ]} />
     </div>
   );

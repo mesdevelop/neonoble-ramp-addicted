@@ -760,9 +760,52 @@ class CaspService:
         entry.pop("_id", None)
         return entry
 
+    async def decide_trp_inbound(self, trp_id: str, decision: str,
+                                 notes: Optional[str], actor: Dict[str, Any]) -> Dict[str, Any]:
+        """Accept or reject an inbound Travel Rule message (per MiCAR Art. 82).
+
+        ACCEPT  → mark the originator + tx as recognised; downstream the AML
+                  service can already credit the customer once the on-chain
+                  deposit is confirmed.
+        REJECT  → flag the message; spawn a SAR draft for MLRO if requested.
+        """
+        assert decision in ("ACCEPT", "REJECT")
+        update = {
+            "status": "ACCEPTED" if decision == "ACCEPT" else "REJECTED",
+            "decision_notes": notes,
+            "decided_at": datetime.now(timezone.utc),
+            "decided_by": actor.get("user_id"),
+        }
+        result = await self.db.casp_trp_inbox.find_one_and_update(
+            {"id": trp_id}, {"$set": update},
+            projection={"_id": 0}, return_document=True,
+        )
+        if not result:
+            return {"error": "trp_not_found"}
+        await self.audit.append(
+            actor_id=actor.get("user_id"), actor_email=actor.get("email"),
+            actor_role=actor.get("role"),
+            action=f"TRP_INBOUND_{decision}", entity_type="TravelRuleTransfer",
+            entity_id=trp_id, payload={"notes": notes},
+        )
+        return result
+
     async def list_trp_inbox(self, limit: int = 100) -> List[Dict[str, Any]]:
         cur = self.db.casp_trp_inbox.find({}, {"_id": 0}).sort("received_at", -1).limit(limit)
         return await cur.to_list(length=limit)
+
+    async def delete_vasp(self, did: str, actor: Dict[str, Any]) -> Dict[str, Any]:
+        result = await self.db.casp_vasp_directory.find_one_and_delete(
+            {"did": did}, projection={"_id": 0, "shared_secret": 0}
+        )
+        if result:
+            await self.audit.append(
+                actor_id=actor.get("user_id"), actor_email=actor.get("email"),
+                actor_role=actor.get("role"),
+                action="VASP_DIRECTORY_DELETED", entity_type="VaspDirectory",
+                entity_id=did, payload={"name": result.get("name")},
+            )
+        return result or {"error": "vasp_not_found"}
 
     async def list_vasps(self) -> List[Dict[str, Any]]:
         cur = self.db.casp_vasp_directory.find(

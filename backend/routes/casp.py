@@ -471,3 +471,27 @@ async def upsert_vasp(body: VaspReq, actor: dict = Depends(require_compliance)):
         body.did, body.name, body.trp_endpoint,
         body.known_addresses, body.shared_secret, actor,
     )
+
+
+@router.delete("/trp/vasps/{did:path}")
+async def delete_vasp(did: str, actor: dict = Depends(require_compliance)):
+    result = await _casp.delete_vasp(did, actor)
+    if result.get("error"):
+        raise HTTPException(status_code=404, detail=result)
+    return result
+
+
+class TrpDecisionReq(BaseModel):
+    decision: str  # ACCEPT | REJECT
+    notes: Optional[str] = None
+
+
+@router.post("/trp/inbox/{trp_id}/decision")
+async def trp_decision(trp_id: str, body: TrpDecisionReq,
+                       actor: dict = Depends(require_compliance)):
+    if body.decision not in ("ACCEPT", "REJECT"):
+        raise HTTPException(status_code=400, detail="decision must be ACCEPT or REJECT")
+    result = await _casp.decide_trp_inbound(trp_id, body.decision, body.notes, actor)
+    if result.get("error"):
+        raise HTTPException(status_code=404, detail=result)
+    return result

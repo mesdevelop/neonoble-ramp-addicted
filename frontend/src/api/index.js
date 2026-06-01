@@ -226,6 +226,9 @@ export const caspApi = {
   listVasps: async () => (await api.get('/casp/trp/vasps')).data,
   upsertVasp: async (body) => (await api.post('/casp/trp/vasps', body)).data,
   listTrpInbox: async () => (await api.get('/casp/trp/inbox')).data,
+  decideTrpInbox: async (id, decision, notes) =>
+    (await api.post(`/casp/trp/inbox/${id}/decision`, { decision, notes })).data,
+  deleteVasp: async (did) => (await api.delete(`/casp/trp/vasps/${encodeURIComponent(did)}`)).data,
   uploadKycDocument: async (kycId, body) => (await api.post(`/casp/kyc/${kycId}/documents`, body)).data,
   listKycDocuments: async (kycId) => (await api.get(`/casp/kyc/${kycId}/documents`)).data,
   // Block 6
