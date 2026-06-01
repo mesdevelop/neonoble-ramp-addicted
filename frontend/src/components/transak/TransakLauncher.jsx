@@ -122,10 +122,12 @@ export const TransakLauncher = ({ config, walletAddress, isBSC, onEvent }) => {
         const { data } = await api.post('/transak/widget-url', params);
         widgetUrl = data?.widget_url || '';
       } catch (err) {
-        const msg =
-          err?.response?.data?.detail ||
-          err?.message ||
-          'Failed to create Transak widget URL';
+        const status = err?.response?.status;
+        const detail = err?.response?.data?.detail || err?.message || 'Failed to create Transak widget URL';
+        let msg = detail;
+        if (status === 409 && String(detail).includes('TRANSAK_KYB_PENDING')) {
+          msg = 'Transak account approval pending — we have valid Production credentials but Transak compliance has not yet activated widget session creation for this account. Please retry in a few hours, or contact NeoNoble support if this persists.';
+        }
         setLaunchError(msg);
         setOpening(null);
         return;
