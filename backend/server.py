@@ -77,6 +77,7 @@ from routes.transak import router as transak_router, set_transak_service
 from routes.casp import router as casp_router, set_services as set_casp_services
 from routes.onboarding import router as onboarding_router, set_services as set_onboarding_services
 from middleware.casp_rbac import bind_db as bind_casp_db
+from middleware.kyc_gate import bind_db as bind_kyc_gate_db
 
 # Initialize services
 auth_service = AuthService(db)
@@ -90,6 +91,7 @@ email_service = EmailService()
 audit_log_service = AuditLogService(db)
 casp_service = CaspService(db, audit_log_service, wallet_service=wallet_service)
 bind_casp_db(db)
+bind_kyc_gate_db(db)
 
 # Wire up services
 ramp_service.set_wallet_service(wallet_service)

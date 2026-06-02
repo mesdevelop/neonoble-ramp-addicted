@@ -8,6 +8,7 @@ from models.transaction import TransactionResponse
 from services.ramp_service import RampService
 from services.pricing_service import pricing_service, SUPPORTED_CRYPTOS, NENO_PRICE_EUR
 from middleware.auth import get_current_user, get_optional_user
+from middleware.kyc_gate import require_kyc_approved
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +54,9 @@ async def get_prices():
 @router.post("/onramp/quote", response_model=QuoteResponse)
 async def create_onramp_quote(
     request: UserQuoteRequest,
-    current_user: dict = Depends(get_optional_user)
+    current_user: dict = Depends(require_kyc_approved)
 ):
-    """Create an onramp quote (EUR -> Crypto) for logged-in users."""
+    """Create an onramp quote (EUR -> Crypto) for logged-in users with APPROVED KYC."""
     if not request.fiat_amount:
         raise HTTPException(status_code=400, detail="fiat_amount is required for onramp")
     
@@ -78,9 +79,9 @@ async def create_onramp_quote(
 @router.post("/onramp/execute", response_model=dict)
 async def execute_onramp(
     request: UserRampRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(require_kyc_approved)
 ):
-    """Execute onramp transaction for logged-in users."""
+    """Execute onramp transaction for logged-in users with APPROVED KYC."""
     if not request.wallet_address:
         raise HTTPException(status_code=400, detail="wallet_address is required for onramp")
     
@@ -99,9 +100,9 @@ async def execute_onramp(
 @router.post("/offramp/quote", response_model=QuoteResponse)
 async def create_offramp_quote(
     request: UserQuoteRequest,
-    current_user: dict = Depends(get_optional_user)
+    current_user: dict = Depends(require_kyc_approved)
 ):
-    """Create an offramp quote (Crypto -> EUR) for logged-in users."""
+    """Create an offramp quote (Crypto -> EUR) for logged-in users with APPROVED KYC."""
     if not request.crypto_amount:
         raise HTTPException(status_code=400, detail="crypto_amount is required for offramp")
     
@@ -124,9 +125,9 @@ async def create_offramp_quote(
 @router.post("/offramp/execute", response_model=dict)
 async def execute_offramp(
     request: UserRampRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(require_kyc_approved)
 ):
-    """Execute offramp transaction for logged-in users."""
+    """Execute offramp transaction for logged-in users with APPROVED KYC."""
     if not request.bank_account:
         raise HTTPException(status_code=400, detail="bank_account is required for offramp")
     

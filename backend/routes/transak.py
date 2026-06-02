@@ -25,7 +25,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from typing import Optional, Any, Dict, List
 
-from middleware.auth import get_optional_user
+from middleware.auth import get_optional_user, get_current_user
+from middleware.kyc_gate import require_kyc_approved
 from services.transak_service import TransakService
 
 logger = logging.getLogger(__name__)
@@ -87,8 +88,14 @@ async def get_config():
 
 
 @router.post("/widget-url", response_model=CreateWidgetUrlResponse)
-async def create_widget_url(request: CreateWidgetUrlRequest):
+async def create_widget_url(
+    request: CreateWidgetUrlRequest,
+    current_user: dict = Depends(require_kyc_approved),
+):
     """Create a single-use Transak widget URL with embedded session token.
+
+    Server-side KYC enforcement: the calling USER must have an APPROVED
+    KYC record. ADMIN / DEVELOPER roles bypass for internal testing.
 
     The backend calls Transak's /partners/api/v2/refresh-token (using
     TRANSAK_API_SECRET) to obtain a partner access token, then calls

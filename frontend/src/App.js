@@ -1,7 +1,9 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 
 // Pages
 import Home from "./pages/Home";
@@ -60,6 +62,25 @@ function PublicRoute({ children }) {
 }
 
 function AppRoutes() {
+  const navigate = useNavigate();
+
+  // Global KYC-required interceptor: any 403 with {error:'kyc_required'}
+  // from the backend triggers a toast + redirect to /onboarding so the
+  // user always knows why a transaction was blocked.
+  useEffect(() => {
+    const handler = (e) => {
+      const status = e.detail?.kyc_status || 'NOT_STARTED';
+      toast.error('KYC verification required', {
+        description: `Status: ${status} — complete identity verification to transact.`,
+        action: { label: 'Verify now', onClick: () => navigate('/onboarding') },
+      });
+      // Best-effort auto-redirect for the no-action case
+      setTimeout(() => navigate('/onboarding'), 1500);
+    };
+    window.addEventListener('neonoble:kyc-required', handler);
+    return () => window.removeEventListener('neonoble:kyc-required', handler);
+  }, [navigate]);
+
   return (
     <Routes>
       {/* Public Routes */}

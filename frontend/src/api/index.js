@@ -79,6 +79,18 @@ api.interceptors.response.use(
         return api(original);
       }
     }
+    // KYC required (403 with structured detail) — emit a global event so any
+    // page can route the user to /onboarding without duplicating logic.
+    if (status === 403) {
+      const detail = error.response?.data?.detail;
+      if (detail && typeof detail === 'object' && detail.error === 'kyc_required') {
+        try {
+          window.dispatchEvent(
+            new CustomEvent('neonoble:kyc-required', { detail })
+          );
+        } catch (_) {}
+      }
+    }
     return Promise.reject(error);
   }
 );
