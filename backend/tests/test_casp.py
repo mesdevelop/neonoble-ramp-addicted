@@ -383,6 +383,9 @@ class TestRegression:
                           json={"fiat_amount": 100, "fiat_currency": "EUR",
                                 "crypto_currency": "USDC", "network": "bsc"},
                           timeout=15)
-        # Endpoint should exist (not 404/405). 502 acceptable: upstream Transak
-        # staging key may reject — tracked separately, not a CASP regression.
-        assert r.status_code in (200, 400, 422, 502), r.text
+        # Endpoint should exist (not 404/405). Acceptable upstream states:
+        #   200 — happy path
+        #   400/422 — bad request payload
+        #   409 — TRANSAK_KYB_PENDING (account waiting Transak compliance approval)
+        #   502 — generic upstream rejection
+        assert r.status_code in (200, 400, 422, 409, 502), r.text

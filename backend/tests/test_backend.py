@@ -184,8 +184,9 @@ class TestRampRegression:
         # NENO is fixed at 10,000 EUR
         assert float(prices["NENO"]) == 10000.0
 
-    def test_user_onramp_quote_with_auth(self, base_url, user_authed_client):
-        r = user_authed_client.post(
+    def test_user_onramp_quote_with_auth(self, base_url, dev_authed_client):
+        # Note: USER role now requires APPROVED KYC; DEVELOPER bypasses for API testing.
+        r = dev_authed_client.post(
             f"{base_url}/api/ramp/onramp/quote",
             json={"fiat_amount": 100.0, "crypto_currency": "NENO"},
         )
@@ -196,8 +197,9 @@ class TestRampRegression:
         crypto_amt = d.get("crypto_amount")
         assert crypto_amt is not None and float(crypto_amt) > 0
 
-    def test_user_offramp_quote_returns_deposit_address_for_neno(self, base_url, user_authed_client):
-        r = user_authed_client.post(
+    def test_user_offramp_quote_returns_deposit_address_for_neno(self, base_url, dev_authed_client):
+        # Note: USER role now requires APPROVED KYC; DEVELOPER bypasses for API testing.
+        r = dev_authed_client.post(
             f"{base_url}/api/ramp/offramp/quote",
             json={"crypto_amount": 0.5, "crypto_currency": "NENO"},
         )

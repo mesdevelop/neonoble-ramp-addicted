@@ -145,6 +145,8 @@ class TestPasswordFlows:
             _t.sleep(0.3)
         assert jti, "password_reset_jti was not persisted"
 
+        import sys as _sys
+        _sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
         from utils.jwt_utils import create_password_reset_token
         token = create_password_reset_token(user_id=user_id, jti=jti)
 

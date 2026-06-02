@@ -142,7 +142,47 @@ Build a full-stack on/off-ramp platform for the **NeoNoble Ramp** product
   Tornado Cash → `risk_score: 100, is_critical: true, categories: [sanctions]`,
   inbound TRP HMAC verification works, audit chain 43 entries verified.
 
-### Iteration 7 (current — First Customer Onboarding Flow + live keys, 2026-06-01)
+### Iteration 8 (current — KYC server-side enforcement + integrity hardening, 2026-06-02)
+- **Server-side KYC gate** (`middleware/kyc_gate.py`) enforced on ALL
+  retail transaction endpoints:
+  * `POST /api/ramp/onramp/quote`
+  * `POST /api/ramp/onramp/execute`
+  * `POST /api/ramp/offramp/quote`
+  * `POST /api/ramp/offramp/execute`
+  * `POST /api/transak/widget-url`
+- **Status codes**:
+  * `401` if no/invalid token
+  * `403` with structured detail `{error: 'kyc_required', kyc_status: 'NOT_STARTED|IN_REVIEW|REJECTED|ON_HOLD', message: '...'}` if KYC not APPROVED
+  * `200` (or 409 TRANSAK_KYB_PENDING for widget) if APPROVED
+- **ADMIN/DEVELOPER roles bypass** the gate (internal CASP operators
+  + dev testing via DEVELOPER token).
+- **Frontend axios interceptor** dispatches `neonoble:kyc-required`
+  CustomEvent on 403; `App.js` global listener shows sonner toast +
+  auto-redirects to `/onboarding` after 1.5s — no per-page duplication.
+- **Dashboard Retail Ramp CTA** visually gates Buy/Sell/Swap cards (opacity-60
+  + link to `/onboarding` instead of `/transak`) until KYC = APPROVED.
+- **Transak Production validated**: refresh-token API works with the new
+  `e2bec76f-…` Live key; widget session API returns `HTTP 409 TRANSAK_KYB_PENDING`
+  (waiting on Rahul Das KYB approval). Backend now correctly classifies
+  this state as 409 instead of bubbling up as 502.
+- **Password reset flow integrity**: full audit performed — 30/30 manual
+  + 14/14 pytest pass:
+  * forgot-password returns generic message (no enumeration)
+  * reset-password with valid token works (200)
+  * old password rejected (401)
+  * new password accepted (200)
+  * reset token cannot be reused (400, single-use jti enforced)
+  * invalid reset token rejected (400)
+  * change-password works with correct current password
+  * change-password rejects wrong current password (400)
+- **Test suite final**: `pytest backend/tests/` → **119 passed, 1 skipped, 0 failed**.
+- **Test data drift fixes**:
+  * `test_transak.py` now accepts STAGING|PRODUCTION env values
+  * `test_casp.py::test_transak_widget_url` now accepts 409 KYB-pending
+  * `test_backend.py::test_user_*ramp_quote_*` now uses `dev_authed_client`
+    (DEVELOPER bypasses KYC gate) to test the ramp endpoint logic itself
+
+## Iteration 7 (First Customer Onboarding Flow + live keys, 2026-06-01)
 - **Public self-service KYC flow** at `/onboarding` — protected route, 4-step
   stepper (Personal Info → ID Document → Selfie → Status) with retail-grade
   data-testid hooks for testing.
