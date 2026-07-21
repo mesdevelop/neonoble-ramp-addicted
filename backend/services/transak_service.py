@@ -125,6 +125,22 @@ class TransakService:
         enforced["apiKey"] = api_key
         enforced["referrerDomain"] = referrer_domain
 
+        # NENO-on-BSC canonicalisation. If the caller targeted NENO, ensure:
+        #   - network is bsc (Transak's BSC identifier)
+        #   - the BEP-20 contract address is passed so Transak can bind the
+        #     custom asset (they need this when the code is not on their
+        #     global allow-list yet)
+        #   - default fiat is EUR (unless caller overrode)
+        code = (enforced.get("cryptoCurrencyCode") or "").upper()
+        if code == "NENO":
+            enforced["network"] = "bsc"
+            enforced.setdefault("cryptoCurrencyAddress", NENO_CONTRACT_ADDRESS)
+            enforced.setdefault("defaultFiatCurrency", "EUR")
+            enforced.setdefault("fiatCurrency", "EUR")
+
+        # Prune None / empty values so we send a clean payload to Transak
+        enforced = {k: v for k, v in enforced.items() if v is not None and v != ""}
+
         url = f"{self._gateway_base()}/api/v2/auth/session"
         headers = {
             "access-token": access_token,

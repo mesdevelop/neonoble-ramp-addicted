@@ -142,8 +142,40 @@ Build a full-stack on/off-ramp platform for the **NeoNoble Ramp** product
   Tornado Cash → `risk_score: 100, is_critical: true, categories: [sanctions]`,
   inbound TRP HMAC verification works, audit chain 43 entries verified.
 
-### Iteration 8 (current — KYC server-side enforcement + integrity hardening, 2026-06-02)
-- **Server-side KYC gate** (`middleware/kyc_gate.py`) enforced on ALL
+### Iteration 9 (current — Transak iframe modal + Start Trading workflow, 2026-07-21)
+- **New `TransakIframeModal` component** (`components/transak/TransakIframeModal.jsx`):
+  responsive Dialog + `<iframe>` (not popup) hosting the Transak widget.
+  Handles postMessage events from the widget origin (production/staging
+  auto-detected), records events server-side via `transakApi.logEvent()`,
+  auto-closes on TRANSAK_ORDER_SUCCESSFUL / CANCELLED / WIDGET_CLOSE.
+- **New `StartTradingCard`** on the Dashboard replaces `RetailRampCTA`:
+  3 CTAs (Buy / Sell / Swap) that open the iframe modal in-place — no
+  redirect, no popup. KYC-gated (ADMIN/DEVELOPER bypass).
+- **New `TransakSandboxCard`** on the Developer Portal (`/dev`): shows
+  the request payload for `/api/transak/widget-url`, copyable NENO
+  contract, wallet-address input, and 3 launch buttons for BUY/SELL/SWAP.
+- **Backend widget-url schema** now accepts `cryptoCurrencyAddress`,
+  `cryptoCurrencyList`, `fiatAmount`. When `cryptoCurrencyCode='NENO'`,
+  the service **automatically injects** the canonical BSC contract
+  `0xeF3F5C1892A8d7A3304E4A15959E124402d69974` and forces `network='bsc'`
+  + `defaultFiatCurrency='EUR'` / `fiatCurrency='EUR'`. Prunes empty
+  values before hitting Transak.
+- **Widget params guaranteed** (per user spec):
+  * `apiKey` — server-controlled (env)
+  * `referrerDomain` — server-controlled (host)
+  * `cryptoCurrencyCode='NENO'` — from frontend
+  * `cryptoCurrencyAddress='0xeF3F...9974'` — server-injected for NENO
+  * `network='bsc'` — server-forced for NENO
+  * `fiatCurrency='EUR'` + `defaultFiatCurrency='EUR'` — server default
+  * `themeColor='7c3aed'`, `hideMenu='true'`, `disableWalletAddressForm='true'`
+- **Verified E2E**: Playwright click on Buy → modal opens → backend
+  called → 409 KYB_PENDING → clean error UX with Close button.
+  When Transak KYB is approved, the same code path renders the actual
+  iframe with the NENO buy flow — zero further changes needed.
+- **Tests**: `pytest backend/tests/` still `119 passed, 1 skipped, 0 failed`
+  (Transak + KYC gate suites re-verified: 33 passed / 1 skipped).
+
+## Iteration 8 (KYC server-side enforcement + integrity hardening, 2026-06-02) (`middleware/kyc_gate.py`) enforced on ALL
   retail transaction endpoints:
   * `POST /api/ramp/onramp/quote`
   * `POST /api/ramp/onramp/execute`

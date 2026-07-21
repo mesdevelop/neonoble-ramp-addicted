@@ -8,7 +8,7 @@ import { Coins, LogOut, ShieldCheck, ArrowRight } from 'lucide-react';
 import { PriceDisplay } from '../components/dashboard/PriceDisplay';
 import { TransactionList } from '../components/dashboard/TransactionList';
 import { RampPanel } from '../components/dashboard/RampPanel';
-import { RetailRampCTA } from '../components/dashboard/RetailRampCTA';
+import { StartTradingCard } from '../components/dashboard/StartTradingCard';
 
 const POPULAR_CRYPTOS = ['BTC', 'ETH', 'NENO', 'USDT', 'SOL', 'BNB'];
 
@@ -123,7 +123,9 @@ export default function Dashboard() {
 
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
-            <RetailRampCTA kycStatus={kycStatus} />
+            <StartTradingCard
+              kycStatus={isDeveloper ? 'APPROVED' : kycStatus}
+            />
             <RampPanel onTransactionExecuted={refreshTransactions} />
           </div>
           <div className="space-y-6">

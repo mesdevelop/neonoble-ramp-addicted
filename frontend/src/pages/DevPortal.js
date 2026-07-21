@@ -9,6 +9,7 @@ import { CreateKeyForm } from '../components/devportal/CreateKeyForm';
 import { CreatedKeyModal } from '../components/devportal/CreatedKeyModal';
 import { ApiKeyList } from '../components/devportal/ApiKeyList';
 import { ApiDocs } from '../components/devportal/ApiDocs';
+import { TransakSandboxCard } from '../components/devportal/TransakSandboxCard';
 
 export default function DevPortal() {
   const { user, logout, isAuthenticated, isDeveloper } = useAuth();
@@ -108,6 +109,8 @@ export default function DevPortal() {
 
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
+            <TransakSandboxCard />
+
             <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold text-white">API Keys</h2>

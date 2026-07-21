@@ -56,6 +56,13 @@ class TransakEventResponse(BaseModel):
 class CreateWidgetUrlRequest(BaseModel):
     productsAvailed: Optional[str] = None
     cryptoCurrencyCode: Optional[str] = None
+    # BEP-20 / ERC-20 contract address for custom token (e.g., NENO on BSC).
+    # Transak requires this when the token symbol alone is ambiguous or is a
+    # custom asset the partner has whitelisted.
+    cryptoCurrencyAddress: Optional[str] = None
+    # Comma-separated list of allowed crypto currency codes. Used by SWAP flow
+    # to restrict the source/destination selection to a curated subset.
+    cryptoCurrencyList: Optional[str] = None
     network: Optional[str] = None
     walletAddress: Optional[str] = None
     disableWalletAddressForm: Optional[str] = None
@@ -64,6 +71,7 @@ class CreateWidgetUrlRequest(BaseModel):
     defaultFiatCurrency: Optional[str] = None
     partnerCustomerId: Optional[str] = None
     fiatCurrency: Optional[str] = None
+    fiatAmount: Optional[float] = None
     referrerDomain: Optional[str] = None
 
 
