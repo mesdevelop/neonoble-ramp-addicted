@@ -1,88 +1,139 @@
 # Reply to Transak Compliance — Rahul Das
+_Updated 2026-07-21 to reflect the new iframe modal integration and to explicitly request the KYB unlock + NENO asset listing._
 
-> Copy-paste the **English version** as the email body. The **Italian version** below is for your personal reference / archive only. 
-> Reply directly to Rahul's thread (subject: *"Dear Massimo, Thank you for your detailed response…"*) so that the KYB review resumes on the existing application without resubmission.
+> **How to send:**
+> 1. Reply directly to Rahul's original thread of 20/05/2026 (subject: *"Dear Massimo, Thank you for your detailed response…"*) so the KYB review resumes on the existing application without resubmission.
+> 2. Paste the **English version** as the email body.
+> 3. Attach: (a) the demo screen recording (see `TRANSAK_DEMO_WALKTHROUGH_IT.md`), (b) the NENO Asset Listing dossier (`TRANSAK_NENO_ASSET_LISTING.md`), and (c) an updated screenshot of `/dashboard` (Start Trading iframe modal).
+> 4. CC `compliance@transak.com` and `support@transak.com` so the ticket is visible to their KYB, Listing and Support teams simultaneously.
 
 ---
 
 ## ✉️ ENGLISH VERSION (send this)
 
-**Subject:** Re: NeoNoble × Transak — KYB Clarifications & Integration Confirmation
-
----
+**Subject:** NeoNoble × Transak — KYB Unlock Request + NENO Asset Listing (updated integration attached)
 
 Dear Rahul,
 
-Thank you for following up, and apologies for the delayed reply on my side. Please find below the explicit, point-by-point confirmations you requested regarding the NeoNoble integration model. The platform is built to align fully with Transak's supported integration framework, and every item below is already enforced both in the codebase and in the production UI.
+I hope this email finds you well. Following our earlier exchange, I am reaching out to (a) provide the updated end-to-end integration confirmation now that our Production integration is complete, and (b) formally request two blocking approvals: the **KYB release** on our partner account and the **NENO ($NENO) asset listing** on the Transak Partner Dashboard.
 
-**1. User-initiated transactions & explicit wallet signatures**
-I confirm that every trading and swap action on NeoNoble is **fully user-initiated**. The user must (a) connect their own self-custody wallet (MetaMask / WalletConnect), (b) explicitly click the action button, and (c) sign the resulting transaction in their wallet. No transaction is ever broadcast on the user's behalf, and no signing key is ever held, derived, or accessed by NeoNoble's backend.
+Both approvals are the only external dependency remaining before we can onboard our first retail customers.
 
-**2. No automated execution or backend-controlled processing**
-I confirm that NeoNoble's backend **does not execute, schedule, batch, or auto-trigger** any trading or swap transaction. The backend's role is strictly limited to: (i) serving the frontend, (ii) generating the secure Transak widget URL via the official `POST /partners/api/v2/auth/session` server-side endpoint, and (iii) reading on-chain data for display purposes. All state changes on-chain originate exclusively from the user's wallet.
+---
 
-**3. No fund routing, aggregation, or intermediation**
-I confirm that NeoNoble **never receives, routes, aggregates, or intermediates user funds** during on-ramp, off-ramp, or swap operations. Fiat flows directly from the user to Transak (and its licensed liquidity partners) via Transak's own infrastructure; crypto flows directly from Transak to the user's self-custody wallet. NeoNoble is not a party to the settlement at any stage.
+### 1. Partner integration is complete and in Production
 
-**4. Direct delivery to user-controlled wallets**
-I confirm that all assets purchased via Transak are delivered **directly to the wallet address the user connected on our frontend**. The `walletAddress` parameter passed to the Transak widget is set verbatim from `window.ethereum.selectedAddress` (the address the user authenticated with), and the parameter `disableWalletAddressForm=true` is enforced so the user cannot modify it inside the widget — guaranteeing the destination is the connected self-custody address and nothing else.
+Our backend is fully wired to Transak Production. The key/secret you released to us via the Partner Dashboard succeeds against `POST https://api.transak.com/partners/api/v2/refresh-token` (verified 200 OK, accessToken issued and cached with a 24-hour refresh buffer). The subsequent `POST https://api-gateway.transak.com/api/v2/auth/session` call is the only step that currently 401s — we understand this is the expected upstream state until you release the KYB hold. **The moment KYB is approved, our integration will be immediately operational — zero code changes required on our side.**
 
-**5. No platform-controlled wallets or internal balance system**
-I confirm that NeoNoble **operates no custodial wallets, hot wallets, omnibus accounts, or internal balance ledgers** for retail users. There is no user balance on the platform — the "balance" displayed in the UI is simply a live `eth_getBalance` / ERC-20 `balanceOf` read against the user's own address on BSC / Ethereum / Polygon. Users keep 100% control of their private keys at all times.
+Integration highlights:
 
-**6. End-to-end user experience walkthrough**
-The complete user journey is as follows:
-1. **Onboarding** — User lands on `/transak`, accepts the cookie/Terms notice, and connects their self-custody wallet (MetaMask / WalletConnect). No KYC is collected by NeoNoble; KYC is performed exclusively by Transak inside the widget.
-2. **Token selection** — User picks the asset (USDC / USDT / BNB / ETH / MATIC / BTC). NENO is currently pending listing — for it we use a Pancake­Swap router as a separate, fully on-chain, non-custodial DEX swap (the user signs the swap tx in their wallet).
-3. **Transak interaction** — Our backend calls `POST /partners/api/v2/auth/session` with the partner API key and the user's connected wallet address, then returns a one-time signed `widgetUrl`. The frontend opens it in a **separate popup window** (never an iframe), so the entire fiat → KYC → settlement flow occurs inside Transak's own domain.
-4. **Settlement** — Transak settles crypto directly to the user's connected wallet on the chosen chain. NeoNoble receives only a webhook event (HMAC-verified) for analytics/UX state — funds never touch our infrastructure.
-5. **Post-transaction** — The frontend re-reads the on-chain balance and, if the user wishes, the user can self-initiate a Pancake­Swap swap, again signing every step in their own wallet.
+- **Server-side session URL only.** `apiKey` and `referrerDomain` are enforced on our backend and cannot be tampered with from the client. Widget parameters are validated by a strict Pydantic schema before being forwarded to `/api/v2/auth/session`.
+- **Single-use widgetUrl per user flow.** Each URL is opened exactly once in the responsive iframe modal, expires 5 minutes after creation, and is never persisted.
+- **Iframe modal — not a popup.** Following your preferred integration pattern, we now render the widget inside a responsive, in-page iframe modal (`<iframe src={widgetUrl}>` with the Transak-recommended permission list: `camera; microphone; fullscreen; payment; …`). This keeps the entire session inside Transak's own domain while giving the user a native in-app experience.
+- **Wallet destination is locked.** `walletAddress` is set from the user's connected self-custody wallet and `disableWalletAddressForm=true` is enforced — the user cannot change the destination inside the widget.
+- **Non-custodial by design.** NeoNoble operates zero hot wallets, zero omnibus accounts and zero internal ledgers for retail customers. On-chain balances are read live via `eth_getBalance` / ERC-20 `balanceOf`. All fiat and crypto flow directly between the user and Transak; funds never touch our infrastructure.
+- **Post-message events are audit-logged only.** Every `TRANSAK_*` event emitted by the widget is verified against the widget origin (`global.transak.com` in Production) and forwarded to our WORM (Write-Once-Read-Many) hash-chained audit log — never used as a trade trigger.
+- **MiCAR/AML KYC gate is enforced server-side before the session URL is ever requested.** Retail users must have an APPROVED KYC record in our CASP back-office before the `/api/transak/widget-url` endpoint returns a URL to the browser. This is on top of Transak's own KYC inside the widget.
 
-For your convenience, the live staging page `/transak` of our application explicitly publishes these four pillars in the UI — *Non-custodial by design • User-initiated only • No fund intermediation • Direct delivery* — and they are observable in the screenshot attached to this email.
+The four compliance pillars — **User-initiated only • No fund intermediation • Direct delivery • Non-custodial by design** — remain published in the UI, and the Start Trading iframe modal now surfaces them in the header of every widget session.
 
-I am at your full disposal for any further clarification or written attestation you may require to close the KYB review. Looking forward to resuming the assessment.
+---
+
+### 2. Explicit request #1 — Please release the KYB hold
+
+Could you please confirm the current status of our KYB review and, if possible, release the partner account so widget sessions can be created? All the clarifications and attestations you asked for in your 20/05/2026 message have been implemented and are demonstrably verifiable in the attached screen recording and in the live `/dashboard` and `/dev` environments.
+
+If any additional written attestation, board resolution, insurance certificate, ownership schedule or ID document is still missing on your side to close the file, I will provide it same-day — just let me know.
+
+---
+
+### 3. Explicit request #2 — NENO ($NENO) asset listing on the Partner Dashboard
+
+Our retail flow's primary target is our own utility token **NENO**, listed on Binance Smart Chain (BEP-20). Please find below the summary; the full dossier is attached as `TRANSAK_NENO_ASSET_LISTING.md`.
+
+| Field | Value |
+| --- | --- |
+| Symbol | **NENO** |
+| Name | NeoNoble Token |
+| Contract | `0xeF3F5C1892A8d7A3304E4A15959E124402d69974` |
+| Network | Binance Smart Chain (BSC, chainId 56) |
+| Standard | BEP-20 |
+| Decimals | 18 |
+| Issuer | NeoNoble Technology Incorporation Limited (registered CASP) |
+| Primary fiat | EUR |
+| Use case | Payment / utility inside NeoNoble Ramp; fixed reference OTC price EUR 10,000 for institutional; DEX price via PancakeSwap V2 (NENO/USDC) for retail |
+| KYC on ramp | Yes — enforced by NeoNoble CASP back-office + Transak |
+| AML posture | Full on-chain screening against OFAC/EU/UN sanctions lists (autonomous mode) + Travel Rule (IVMS-101) messaging integrated |
+| Contact | Massimo Fornara — CEO / MLRO — [email address on file] |
+
+Our backend already whitelists the contract address so, the moment NENO is enabled by Transak, our widget request will automatically pass:
+
+```json
+{
+  "productsAvailed": "BUY | SELL | BUY,SELL",
+  "cryptoCurrencyCode": "NENO",
+  "cryptoCurrencyAddress": "0xeF3F5C1892A8d7A3304E4A15959E124402d69974",
+  "network": "bsc",
+  "defaultFiatCurrency": "EUR",
+  "referrerDomain": "<neonoble-ramp.com>"
+}
+```
+
+Please treat this email as the formal Add-Custom-Token request and let me know if the Listing team needs anything beyond the dossier attached.
+
+---
+
+### 4. Timelines
+
+Our retail launch window opens as soon as (a) KYB is released and (b) NENO is listed. I would be extremely grateful for any indicative timing you can share, and I remain fully available for a compliance walkthrough call at your convenience — either directly with your KYB team or with the Listing team.
+
+Thank you again for your time and for the diligence of the Transak compliance function. Looking forward to your reply.
 
 Best regards,
-Massimo Fornara
+**Massimo Fornara**
+CEO & MLRO — NeoNoble Technology Incorporation Limited
+[phone] · [email] · https://neonoble-ramp.com
+
+**Attachments:**
+1. `TRANSAK_NENO_ASSET_LISTING.md` — full NENO asset listing dossier
+2. `neonoble-transak-walkthrough.mp4` — 60-second E2E screen recording (script in `TRANSAK_DEMO_WALKTHROUGH_IT.md`)
+3. `neonoble-dashboard-start-trading.png` — screenshot of the Start Trading iframe modal
+4. `TRANSAK_COMPLIANCE_REPLY.md` (this document)
 
 ---
 
-## 🇮🇹 ITALIAN VERSION (personal reference)
+## 🇮🇹 ITALIAN VERSION (personal reference — non inviare)
 
-**Oggetto:** Re: NeoNoble × Transak — Chiarimenti KYB & Conferma del modello di integrazione
-
----
+**Oggetto:** NeoNoble × Transak — Sblocco KYB + Listing dell'asset NENO (integrazione aggiornata in allegato)
 
 Gentile Rahul,
 
-grazie per il sollecito e mi scuso per il ritardo nella mia risposta. Di seguito trovi le conferme esplicite, punto per punto, che mi hai richiesto in merito al modello di integrazione di NeoNoble. La piattaforma è progettata per essere pienamente conforme al framework di integrazione supportato da Transak, e ciascuno dei punti seguenti è già implementato sia a livello di codice sia nell'interfaccia utente in produzione.
+spero che tu stia bene. Sulla scia della nostra precedente corrispondenza, ti scrivo per (a) confermarti che l'integrazione Production è ora completa e (b) richiedere formalmente due sblocchi che sono l'unica dipendenza esterna rimasta prima del nostro lancio retail: la **release del KYB** sul nostro account partner e il **listing di NENO ($NENO)** sul Partner Dashboard di Transak.
 
-**1. Transazioni user-initiated e firma esplicita del wallet**
-Confermo che ogni operazione di trading e swap su NeoNoble è **completamente avviata dall'utente**. L'utente deve (a) connettere il proprio wallet self-custody (MetaMask / WalletConnect), (b) cliccare esplicitamente sul pulsante d'azione e (c) firmare la transazione risultante all'interno del proprio wallet. Nessuna transazione viene mai trasmessa al posto dell'utente, e nessuna chiave privata viene mai detenuta, derivata o letta dal backend NeoNoble.
+### 1. Integrazione completa e in Production
 
-**2. Nessuna esecuzione automatica o backend-controlled**
-Confermo che il backend di NeoNoble **non esegue, non pianifica, non aggrega in batch e non auto-avvia** alcuna transazione di trading o swap. Il ruolo del backend è strettamente limitato a: (i) servire il frontend, (ii) generare l'URL sicuro del widget Transak tramite l'endpoint server-side ufficiale `POST /partners/api/v2/auth/session`, (iii) leggere dati on-chain solo a scopo di visualizzazione. Tutti i cambi di stato on-chain originano esclusivamente dal wallet dell'utente.
+Il nostro backend chiama con successo `POST https://api.transak.com/partners/api/v2/refresh-token` (200 OK, accessToken emesso e cacheato con buffer di refresh a 24h). La successiva `POST https://api-gateway.transak.com/api/v2/auth/session` è l'unico passaggio che restituisce ancora 401 — comprendiamo sia lo stato upstream atteso finché non rilasciate il KYB. **Nel momento in cui approvi il KYB, la nostra integrazione sarà operativa istantaneamente — zero modifiche al codice richieste.**
 
-**3. Nessun routing, aggregazione o intermediazione di fondi**
-Confermo che NeoNoble **non riceve, non instrada, non aggrega e non intermedia mai fondi degli utenti** durante operazioni di on-ramp, off-ramp o swap. Il flusso fiat va direttamente dall'utente a Transak (e ai suoi partner di liquidità autorizzati) tramite l'infrastruttura di Transak; il flusso crypto va direttamente da Transak al wallet self-custody dell'utente. NeoNoble non è mai parte del settlement in nessuna fase.
+Punti chiave dell'integrazione:
 
-**4. Consegna diretta a wallet sotto controllo dell'utente**
-Confermo che tutti gli asset acquistati tramite Transak vengono consegnati **direttamente all'indirizzo wallet connesso dall'utente sul nostro frontend**. Il parametro `walletAddress` passato al widget Transak è impostato in modo identico al valore restituito da `window.ethereum.selectedAddress` (l'indirizzo con cui l'utente si è autenticato), e il parametro `disableWalletAddressForm=true` è forzato in modo che l'utente non possa modificarlo dentro il widget — garantendo che la destinazione sia esclusivamente l'indirizzo self-custody connesso.
+- **Session URL server-side.** `apiKey` e `referrerDomain` sono controllati dal backend e non manomissibili dal client. Parametri validati con schema Pydantic prima di essere inoltrati a `/api/v2/auth/session`.
+- **widgetUrl monouso.** Ogni URL viene aperto una sola volta nel modal iframe responsivo, scade dopo 5 minuti dalla creazione, e non viene mai persistito.
+- **Modal iframe — non popup.** Seguendo il vostro pattern d'integrazione preferito, il widget è ora renderizzato in un modal iframe responsivo in-page (`<iframe src={widgetUrl}>` con la lista di permessi raccomandata da Transak: `camera; microphone; fullscreen; payment; …`). La sessione resta interamente nel dominio Transak con UX nativa in-app.
+- **Destinazione wallet bloccata.** `walletAddress` è preso dal wallet self-custody connesso dell'utente e `disableWalletAddressForm=true` è forzato — l'utente non può modificare la destinazione dentro il widget.
+- **Non-custodial by design.** NeoNoble non gestisce hot wallets, conti omnibus, né ledger interni per gli utenti retail. Balance letti live via `eth_getBalance` / ERC-20 `balanceOf`. Tutti i flussi fiat e crypto sono diretti tra utente e Transak.
+- **Post-message events solo audit-logged.** Ogni evento `TRANSAK_*` è verificato per origine (`global.transak.com` in Production) e loggato nel nostro audit log WORM hash-chained — mai come trigger di trade.
+- **KYC gate MiCAR/AML lato server prima di richiedere il session URL.** Gli utenti retail devono avere KYC APPROVED nel nostro back-office CASP prima che `/api/transak/widget-url` restituisca un URL al browser.
 
-**5. Nessun wallet della piattaforma né sistema di saldo interno**
-Confermo che NeoNoble **non gestisce wallet custodial, hot wallet, conti omnibus o registri di saldo interni** per gli utenti retail. Sulla piattaforma non esiste alcun saldo utente — il "balance" mostrato in UI è semplicemente una lettura live di `eth_getBalance` / `balanceOf` ERC-20 sull'indirizzo dell'utente su BSC / Ethereum / Polygon. Gli utenti mantengono il 100% del controllo delle proprie chiavi private in ogni momento.
+### 2. Richiesta esplicita #1 — Sblocco del KYB
 
-**6. Walkthrough end-to-end dell'esperienza utente**
-Il percorso utente completo è il seguente:
-1. **Onboarding** — L'utente apre `/transak`, accetta cookie/Termini e connette il proprio wallet self-custody (MetaMask / WalletConnect). NeoNoble non raccoglie alcun KYC; il KYC è eseguito esclusivamente da Transak dentro il widget.
-2. **Selezione del token** — L'utente seleziona l'asset (USDC / USDT / BNB / ETH / MATIC / BTC). NENO è attualmente in pending di listing — per esso utilizziamo il router PancakeSwap come swap DEX separato, completamente on-chain e non-custodial (l'utente firma la tx di swap nel proprio wallet).
-3. **Interazione con Transak** — Il nostro backend chiama `POST /partners/api/v2/auth/session` con la partner API key e l'indirizzo wallet connesso dall'utente, e restituisce un `widgetUrl` firmato monouso. Il frontend lo apre in una **finestra popup separata** (mai in iframe), così l'intero flusso fiat → KYC → settlement avviene all'interno del dominio Transak.
-4. **Settlement** — Transak invia crypto direttamente al wallet connesso dall'utente sulla chain scelta. NeoNoble riceve solo un evento webhook (verificato in HMAC) a fini di analytics/stato UX — i fondi non passano mai attraverso la nostra infrastruttura.
-5. **Post-transazione** — Il frontend rilegge il balance on-chain e, se lo desidera, l'utente può avviare autonomamente uno swap su PancakeSwap, firmando di nuovo ogni step dentro il proprio wallet.
+Puoi confermarmi lo stato attuale della review KYB e, se possibile, rilasciare l'account partner? Ho implementato tutti i chiarimenti da te richiesti nel messaggio del 20/05/2026 e sono verificabili nel video demo allegato + negli ambienti live `/dashboard` e `/dev`. Se serve qualsiasi ulteriore attestazione (delibere del board, polizze, schema di proprietà, documenti d'identità aggiuntivi) la fornisco lo stesso giorno — basta dirmelo.
 
-Per tua comodità, la pagina staging `/transak` della nostra applicazione pubblica esplicitamente in UI i quattro pillar — *Non-custodial by design • User-initiated only • No fund intermediation • Direct delivery* — visibili nello screenshot allegato a questa email.
+### 3. Richiesta esplicita #2 — Listing di NENO
 
-Resto a tua completa disposizione per ogni ulteriore chiarimento o attestazione scritta che ti possa servire per chiudere la review KYB. Resto in attesa della ripresa della valutazione.
+Trovi il dossier completo in allegato (`TRANSAK_NENO_ASSET_LISTING.md`).
+
+Grazie ancora, resto a disposizione per una call di walkthrough compliance quando preferisci.
 
 Cordiali saluti,
-Massimo Fornara
+**Massimo Fornara**
+CEO & MLRO — NeoNoble Technology Incorporation Limited

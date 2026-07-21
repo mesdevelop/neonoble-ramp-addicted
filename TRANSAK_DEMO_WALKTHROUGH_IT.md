@@ -1,101 +1,124 @@
-# Walkthrough Demo Transak — Copione Video
+# Walkthrough Demo Transak — Copione Video (v2, iframe modal)
 
-**Obiettivo:** registrare un video end-to-end di 45–90 secondi per il team
-di compliance UK di Transak. Dimostra un flusso completamente
-non-custodial: **Onboarding → Connessione Wallet → Transak → Wallet → Interazione.**
+**Obiettivo:** registrare un video end-to-end di **60-90 secondi** per il
+team di compliance UK di Transak. Dimostra che il flusso è:
+- **KYC-gated** (MiCAR compliant, gate server-side)
+- **User-initiated** (nessun trade auto-avviato)
+- **Non-custodial** (nessun wallet della piattaforma)
+- **Direct delivery** (il wallet dell'utente è locked come destinazione)
+- **In-app iframe** (widget dentro un modal responsivo, sessione firmata server-side, single-use, 5-min expiry)
 
-**URL Demo:** `${REACT_APP_BACKEND_URL}/transak`
-(attualmente: `https://neonoble-ramp.preview.emergentagent.com/transak`)
+**URL Demo:** `https://neonoble-ramp.preview.emergentagent.com/dashboard`
+(la nuova esperienza "Start Trading" è la card in alto sulla Dashboard;
+la vecchia pagina `/transak` resta disponibile come approfondimento
+tecnico, ma il flusso principale è ora il modal in-page).
 
-**Token mostrato:**
-- **Intento primario:** NENO (BEP-20, `0xeF3F5C1892A8d7A3304E4A15959E124402d69974`)
-- **Fallback in staging:** USDC su BSC — NENO non è ancora listato nel
-  catalogo staging di Transak. La UI lo dichiara esplicitamente. Basta
-  flippare `TRANSAK_SUPPORTS_NENO=true` in `backend/.env` nel momento in
-  cui Transak abiliterà NENO, e il widget cambierà automaticamente.
+**Token target:**
+- **Primary:** NENO su BSC (contract `0xeF3F5C1892A8d7A3304E4A15959E124402d69974`).
+  Iniettato automaticamente dal backend quando `cryptoCurrencyCode=NENO`.
+- **Fallback fino al listing:** USDC su BSC (evidenziato in UI).
 
-**Ambiente:** Transak `STAGING` (`global-stg.transak.com`).
+**Ambiente:** Transak `PRODUCTION` (`global.transak.com`).
 
 ---
 
-## Pre-flight (da fare una volta sola, OFF-camera)
+## Pre-flight (una tantum, OFF-camera)
 
 1. Installa **MetaMask** nel browser che userai per la registrazione.
-2. Crea o importa un wallet **usa-e-getta** (NON usare le tue chiavi di produzione).
-3. Aggiungi **BNB Smart Chain (mainnet)** al wallet — la pagina ha un
-   pulsante "Switch to BNB Smart Chain" che te lo aggiunge in automatico.
-4. Carica il wallet con una manciata di BNB e un piccolo saldo di USDC su
-   BSC se vuoi che il flusso SELL arrivi fino allo schermo finale. Il
-   widget staging accetta KYC di prova, ma per la SELL serve saldo reale.
-5. Apri uno screen recorder (OBS, QuickTime, Loom, …) a 1080p.
+2. Crea o importa un wallet **usa-e-getta** (mai le tue chiavi di produzione).
+3. Aggiungi **BNB Smart Chain (mainnet)** al wallet.
+4. Assicurati che il KYC utente sia **APPROVED** nel back-office CASP:
+   - Login come `casp-admin@neonoble.example.com` / `CaspAdmin!2026`
+   - `/admin/compliance` → seleziona il KYC IN_REVIEW dell'account demo
+   - Click "Approve" → il gate server-side ora ammette il widget-url per quell'utente.
+5. Apri uno screen recorder (OBS / QuickTime / Loom) a 1080p.
+6. Pulisci il tab della console browser (F12 → clear) — vogliamo mostrare
+   che l'evento `TRANSAK_WIDGET_OPEN` arriva sul postMessage.
 
 ---
 
-## Copione on-camera (60–75 secondi)
+## Copione on-camera (60–90 secondi)
 
 | t | Cosa si vede | Cosa dire (voiceover suggerito) |
 |---|---|---|
-| 0–4s | Home page → click su **Get Started → Login** → arrivi sulla Dashboard | "Questo è NeoNoble Ramp. La demo di compliance è dietro la tab **Transak Demo**." |
-| 4–8s | Click su **Transak Demo** nell'header della Dashboard → si carica la pagina `/transak` | "Apriamo la route dedicata, non-custodial." |
-| 8–18s | Passa sopra alle tre card dei pillar (User-initiated · No Fund Intermediation · Direct Delivery) | "Tre pillar: user-initiated only, no fund intermediation, direct delivery — resi visibili direttamente in pagina." |
-| 18–25s | Click su **Connect Wallet** → prompt di MetaMask → approva → appare la card verde "Wallet connected" | "Step 1: l'utente connette esplicitamente il proprio wallet. Questo indirizzo è l'unica destinazione su cui Transak consegnerà i fondi." |
-| 25–30s | Se la chain non è BSC, click su **Switch to BNB Smart Chain** | "Passiamo a BNB Smart Chain — la rete su cui vive NENO." |
-| 30–40s | Click su **Buy Crypto (On-Ramp)** → si **apre una nuova finestra popup** con il widget Transak: l'indirizzo del wallet è pre-compilato e **disabilitato** | "Step 2: Buy. Transak si apre in una popup separata — mai dentro un iframe — quindi il contesto KYC e pagamenti vive nel browser di Transak, non nel nostro. L'indirizzo del wallet dell'utente è bloccato tramite `disableWalletAddressForm`. Per ora il token è USDC su BSC; NENO sarà attivato non appena Transak whitelistarà il nostro contratto." |
-| 40–50s | Chiudi la popup. Click su **Sell Crypto (Off-Ramp)** → si riapre la popup in modalità SELL | "Step 3: Sell. Stesso wallet, stesso lock. L'utente firma il trasferimento in uscita personalmente dentro la popup Transak — NeoNoble non ha alcuna autorità di firma." |
-| 50–58s | Chiudi, poi click su **Swap (Buy/Sell)** → vedi entrambe le tab disponibili | "Step 4: una tab Swap unificata commuta tra BUY e SELL con `productsAvailed=BUY,SELL`." |
-| 58–70s | Scrolla fino alla card **Transak event stream** che mostra `TRANSAK_WIDGET_INITIALISED`, `…OPEN`, `…CLOSE` | "Ogni evento dell'SDK Transak è loggato client-side e inoltrato al nostro backend per audit — mai come trigger di trade." |
-| 70–75s | Apri la sezione collassata **Widget configuration** che rivela il JSON di config | "Ecco la config completa, sola lettura: ambiente STAGING, network BSC, fiat EUR, walletAddress = indirizzo dell'utente, `disableWalletAddressForm=true`. Fine." |
+| **0–5s** | Login come utente retail (APPROVED KYC), atterra sulla **Dashboard**. In alto, banner "Retail Ramp — non-custodial · PRODUCTION" | "Questo è NeoNoble Ramp. L'utente è un cliente retail con KYC MiCAR già APPROVED da parte del nostro MLRO." |
+| **5–10s** | Zoom sulla card **Start Trading** (badge `BSC · EUR`). Tre CTA visibili: Buy · Sell · Swap. Nessun gate giallo perché KYC è APPROVED. | "La card Start Trading espone tre CTA: Buy, Sell, Swap. Target di default: NENO su BSC, fiat EUR." |
+| **10–15s** | Passa sopra al footer del card che dice "Powered by Transak · single-use widget URL signed by NeoNoble's partner backend (expires in 5 min). We never touch your funds." | "Ogni sessione è firmata dal nostro backend partner tramite `/partners/api/v2/auth/session`, single-use, scadenza 5 minuti." |
+| **15–20s** | Click su **Buy Crypto**. Il modal iframe **si apre in-page**, header viola "Buy Crypto via Transak · PRODUCTION · BSC · EUR". | "Click su Buy. Il modal iframe apre in-page — nessuna popup, nessuna redirezione. Sessione firmata istantaneamente dal backend." |
+| **20–35s** | Il widget Transak carica dentro l'iframe. L'utente vede il flusso Transak nativo con importo, KYC status, metodo di pagamento pre-compilato. Nel campo "Wallet address" mostra l'indirizzo del wallet **grigio e non editabile** (`disableWalletAddressForm=true`). | "Dentro il modal è live il widget Transak. L'indirizzo wallet dell'utente è pre-compilato e bloccato — l'unica destinazione possibile è il suo wallet self-custody. Sotto il cofano il backend ha iniettato il contract NENO `0xeF3F...9974`, network `bsc`, fiat `EUR`." |
+| **35–45s** | Apri DevTools → tab Console. Si vedono log arrivare: `TRANSAK_WIDGET_INITIALISED`, `TRANSAK_WIDGET_OPEN`. | "Ogni evento del widget arriva al frontend via postMessage, viene verificato per origin (`global.transak.com`) e loggato nel nostro audit log WORM. Mai come trigger di trade — solo per audit." |
+| **45–52s** | Chiudi il modal cliccando la X. Il modal si dissolve, la Dashboard è pulita, nessuno stato residuo. | "Chiudo il modal. La sessione widgetUrl è single-use e già scaduta lato Transak." |
+| **52–65s** | Click su **Sell Crypto** → il modal riapre in modalità SELL (header ora "Sell Crypto via Transak"). Stesso wallet lock, stesso backend flow. | "Sell riusa lo stesso pattern. Nuova sessione firmata, stesso wallet locked, stesso flow non-custodial." |
+| **65–75s** | Chiudi. Click su **Swap** → il modal riapre in modalità BUY+SELL (`productsAvailed=BUY,SELL`). | "Swap è semplicemente `productsAvailed=BUY,SELL` — Transak decide internamente in base al saldo del wallet." |
+| **75–85s** | Vai su **Dev Portal** (`/dev`) → mostra la card **Transak Sandbox** con il payload JSON esposto per sviluppatori. | "Per il team dev di Transak: il Dev Portal espone la Sandbox con payload preview, wallet input, e i 3 launch buttons. Bypassa il KYC gate perché ha ruolo DEVELOPER." |
+| **85–90s** | Fine — logo NeoNoble Ramp + tagline "Non-custodial by design. User-initiated only. Direct delivery." | "NeoNoble Ramp — CASP MiCAR, integrazione Transak Production, retail-ready." |
 
 ---
 
-## Mapping Pillar → UI
+## Mapping Pillar → UI (nuova versione iframe)
 
 | Pillar | Dove è imposto | Cosa si vede in camera |
 |---|---|---|
-| **User-initiated Only** | I pulsanti Buy/Sell/Swap sono disabilitati fino a quando `wallet.address` non è valorizzato in `useWallet`. Nessun endpoint backend crea trade. | I pulsanti sono visibilmente grigi finché "Connect Wallet" non riesce; la nota disabilitata recita "Connect your wallet first to enable Buy/Sell/Swap." |
-| **No Fund Intermediation** | Il backend espone solo `GET /api/transak/config` (read-only) e `POST /api/transak/events` (solo log). Nessun endpoint di transfer, payout o custody. | Il JSON della sezione "Widget configuration" mostra `non_custodial: true` e l'oggetto `compliance`. |
-| **Direct Delivery** | L'URL del widget è costruito con `walletAddress=<indirizzo_utente>` + `disableWalletAddressForm=true` + `partnerCustomerId=<indirizzo_utente>`. | Dentro il modal Transak, il campo wallet di destinazione è pre-compilato e non editabile. La card "Wallet connected" mostra esattamente lo stesso indirizzo. |
+| **KYC-gated** | `middleware/kyc_gate.py` restituisce 403 su `POST /api/transak/widget-url` se KYC ≠ APPROVED | Utente non-APPROVED vede la card grigia "Identity verification required" con link a `/onboarding` |
+| **User-initiated Only** | I 3 CTA sono click esplicito dell'utente. Nessun endpoint backend crea trade. | Buy/Sell/Swap sono click manuali; nessun cron/webhook li avvia |
+| **No Fund Intermediation** | Il backend espone solo `POST /transak/widget-url` (crea session URL) e `POST /transak/events` (audit log). Zero endpoint di transfer / payout / custody. | Il payload JSON nel Dev Portal mostra `non_custodial: true` e l'oggetto `compliance` con i 3 flag |
+| **Direct Delivery** | `walletAddress` = wallet self-custody connesso + `disableWalletAddressForm=true` | Dentro il modal, campo wallet grigio e non editabile |
+| **In-app iframe** | Nuovo componente `TransakIframeModal.jsx`: iframe con permessi Transak-recommended, listener origin-verified sui postMessage | Modal responsivo si apre in-page; header viola NeoNoble sopra l'iframe Transak |
+| **Session single-use, 5-min** | Backend chiama `POST /api/v2/auth/session` che genera URL con scadenza 5 min | Footer del modal recita "single-use session (5 min)" |
 
 ---
 
 ## Imprevisti tipici durante la registrazione
 
-- **Popup bloccato dal browser:** Chrome/Edge bloccano la finestra al primo
-  tentativo. Click sull'icona "popup bloccato" nella barra dell'indirizzo →
-  consenti sempre per `neonoble-ramp.preview.emergentagent.com`, poi ri-clicca
-  Buy/Sell/Swap. (Lo script di fallback comunque ti naviga sulla stessa tab
-  se la popup viene rifiutata, così non vedi mai una pagina vuota.)
-- **No injected wallet detected:** la pagina mostra un warning giallo.
-  Installa MetaMask e ricarica la pagina prima di registrare.
-- **I pulsanti restano grigi:** il wallet è connesso ma sulla rete sbagliata.
-  Click su **Switch to BNB Smart Chain**.
-- **Il widget si apre con un token diverso:** il catalogo staging
-  occasionalmente rimappa `cryptoCurrencyCode`. Verifica nell'URL dentro
-  la popup che ci sia `cryptoCurrencyCode=USDC` (o `NENO` una volta
-  supportato). Se non c'è, cambia `TRANSAK_FALLBACK_TOKEN` in
-  `backend/.env` con un altro token listato (es. `USDT`) e riavvia il backend.
-- **Errore `apiKey` non configurato:** manca `TRANSAK_API_KEY` in
-  `backend/.env`. Settalo (di default: la staging key pubblica dai docs
-  Transak) e fai `sudo supervisorctl restart backend`.
+- **Modal apre ma iframe mostra "Cannot open Transak · Transak account KYB is pending":**
+  è l'errore atteso finché Rahul non sblocca il KYB. **Per registrare il
+  video devi aspettare lo sblocco.** Se serve girarlo prima per motivi
+  interni, mostra il modal che si apre + il messaggio d'errore chiaro
+  come proof dell'integrazione lato NeoNoble.
+- **Modal apre ma iframe bianco:** verifica di essere loggato come utente
+  con KYC APPROVED. Il gate server-side blocca gli utenti senza KYC.
+- **KYC APPROVED ma comunque 403:** l'account potrebbe essere ADMIN
+  (bypass) oppure il campo `role` non è impostato. Verifica su MongoDB:
+  `db.casp_kyc.findOne({ user_id: "<id>" })` → `status: "APPROVED"`.
+- **Errore CORS in console:** l'origin Transak sta rifiutando il
+  `referrerDomain`. Confronta il valore inviato con quello registrato nel
+  Partner Dashboard. Devono essere identici (senza `https://`, senza
+  trailing slash).
+- **Iframe non riceve postMessage:** verifica che l'origin whitelist nel
+  componente `TransakIframeModal` matchi (`PROD_ORIGIN =
+  'https://global.transak.com'`).
 
 ---
 
-## Tear-down (da fare DOPO la registrazione)
+## Tear-down (DOPO la registrazione)
 
-- Disconnetti il wallet usa-e-getta da MetaMask → "Connected sites" →
+- Disconnetti il wallet usa-e-getta da MetaMask → Connected sites →
   Rimuovi `neonoble-ramp.preview.emergentagent.com`.
 - Sposta o distruggi il wallet usa-e-getta — non riutilizzarlo in produzione.
+- Cancella cache e localStorage del browser per non lasciare token JWT
+  in giro se hai loggato con account reali.
 
 ---
 
 ## Endpoint backend usati da questo flusso
 
 ```
-GET  /api/transak/config        # config pubblica del widget (api_key, env, network, fiat, flag compliance)
-POST /api/transak/events        # logging osservazionale degli eventi dal browser dell'utente
-GET  /api/transak/events?wallet_address=0x…   # rileggi gli eventi di quel wallet
+POST /api/transak/widget-url
+     ↳ header: Authorization Bearer <user JWT>
+     ↳ body:   { productsAvailed, cryptoCurrencyCode: "NENO",
+                 cryptoCurrencyAddress (auto-injected server-side),
+                 network: "bsc", defaultFiatCurrency: "EUR",
+                 walletAddress, disableWalletAddressForm: "true", … }
+     ↳ 200:    { widget_url, referrer_domain_sent, expires_in_seconds: 300 }
+     ↳ 403:    { detail: { error: "kyc_required", kyc_status, message } }
+     ↳ 409:    { detail: "TRANSAK_KYB_PENDING: ..." }
+
+POST /api/transak/events    # audit-log dei postMessage del widget
+GET  /api/transak/config    # config pubblica (api key, env, network, fiat)
+GET  /api/transak/events    # rilettura audit
 ```
 
-Nessuno degli endpoint sopra crea, instrada o regola un trade. Il widget
-Transak gira interamente nel browser dell'utente e regola i fondi
-direttamente sul wallet dell'utente.
+Nessuno di questi endpoint crea, instrada o regola un trade. Il widget
+Transak gira interamente dentro l'iframe nel browser dell'utente e regola
+i fondi direttamente sul wallet dell'utente. Il backend NeoNoble è
+esclusivamente un partner-signer che emette il session URL.
