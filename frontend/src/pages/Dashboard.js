@@ -9,6 +9,7 @@ import { PriceDisplay } from '../components/dashboard/PriceDisplay';
 import { TransactionList } from '../components/dashboard/TransactionList';
 import { RampPanel } from '../components/dashboard/RampPanel';
 import { StartTradingCard } from '../components/dashboard/StartTradingCard';
+import { AssistantWidget } from '../components/assistant/AssistantWidget';
 
 const POPULAR_CRYPTOS = ['BTC', 'ETH', 'NENO', 'USDT', 'SOL', 'BNB'];
 
@@ -139,6 +140,7 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      <AssistantWidget context="dashboard" />
     </div>
   );
 }

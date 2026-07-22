@@ -142,6 +142,25 @@ Build a full-stack on/off-ramp platform for the **NeoNoble Ramp** product
   Tornado Cash → `risk_score: 100, is_critical: true, categories: [sanctions]`,
   inbound TRP HMAC verification works, audit chain 43 entries verified.
 
+### Iteration 10 (Assistente AI Claude, 2026-07-22)
+- **Anthropic claude-sonnet-4-6** via Emergent Universal Key
+  (`emergentintegrations` + `EMERGENT_LLM_KEY` in backend/.env).
+- **Backend `routes/chat.py`** — `/api/assistant/*`:
+  * `POST /sessions` (context: dashboard|devportal|admin, role-gated)
+  * `GET /sessions`, `GET /sessions/{id}/messages`
+  * `POST /sessions/{id}/stream` — SSE streaming (X-Accel-Buffering: no),
+    history ricostruita da MongoDB (`chat_sessions`, `chat_messages`,
+    ultimi 30 msg) via `initial_messages`.
+- **3 system prompt dedicati**: retail (KYC/NENO/Transak), dev (HMAC/API),
+  admin (copilot compliance MiCAR 7 blocchi). Risponde nella lingua utente.
+- **Frontend `components/assistant/AssistantWidget.jsx`** — FAB + pannello
+  chat streaming, montato su Dashboard, DevPortal e Admin back-office.
+  Session-id persistito in localStorage per contesto; pulsante new-chat.
+- **Verificato E2E**: login → widget → invio → SSE → messaggi persistiti.
+  ⚠️ La risposta LLM è bloccata da **budget Universal Key esaurito**
+  (43.00/43.00 $) — l'utente deve ricaricare da Profile → Universal Key.
+  L'errore degrada con messaggio pulito nel widget.
+
 ### Iteration 9 (current — Transak iframe modal + Start Trading workflow, 2026-07-21)
 - **New `TransakIframeModal` component** (`components/transak/TransakIframeModal.jsx`):
   responsive Dialog + `<iframe>` (not popup) hosting the Transak widget.

@@ -10,6 +10,7 @@ import { CreatedKeyModal } from '../components/devportal/CreatedKeyModal';
 import { ApiKeyList } from '../components/devportal/ApiKeyList';
 import { ApiDocs } from '../components/devportal/ApiDocs';
 import { TransakSandboxCard } from '../components/devportal/TransakSandboxCard';
+import { AssistantWidget } from '../components/assistant/AssistantWidget';
 
 export default function DevPortal() {
   const { user, logout, isAuthenticated, isDeveloper } = useAuth();
@@ -139,6 +140,7 @@ export default function DevPortal() {
           <ApiDocs />
         </div>
       </div>
+      <AssistantWidget context="devportal" />
     </div>
   );
 }

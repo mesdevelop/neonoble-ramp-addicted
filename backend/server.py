@@ -76,6 +76,7 @@ from routes.webhooks import router as webhooks_router, set_payout_service as set
 from routes.transak import router as transak_router, set_transak_service
 from routes.casp import router as casp_router, set_services as set_casp_services
 from routes.onboarding import router as onboarding_router, set_services as set_onboarding_services
+from routes.chat import router as chat_router, set_db as set_chat_db
 from middleware.casp_rbac import bind_db as bind_casp_db
 from middleware.kyc_gate import bind_db as bind_kyc_gate_db
 
@@ -108,6 +109,7 @@ set_transak_service(transak_service)
 set_email_service(email_service)
 set_casp_services(casp_service, audit_log_service)
 set_onboarding_services(casp_service)
+set_chat_db(db)
 
 # Background task for blockchain monitoring
 blockchain_poll_task = None
@@ -260,6 +262,7 @@ api_router.include_router(webhooks_router)
 api_router.include_router(transak_router)
 api_router.include_router(casp_router)
 api_router.include_router(onboarding_router)
+api_router.include_router(chat_router)
 
 # Include the main router
 app.include_router(api_router)

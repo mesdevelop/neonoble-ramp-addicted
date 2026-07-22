@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { AssistantWidget } from '../components/assistant/AssistantWidget';
 import AdminLayout from '../components/admin/AdminLayout';
 import SetupWizard from '../components/admin/SetupWizard';
 import AdminWalkthrough from '../components/admin/AdminWalkthrough';
@@ -882,6 +883,7 @@ export default function Admin() {
         <Route path="autonomy" element={<AutonomyPage />} />
         <Route path="audit" element={<AuditPage />} />
       </Routes>
+      <AssistantWidget context="admin" />
     </AdminLayout>
   );
 }
