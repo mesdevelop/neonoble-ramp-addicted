@@ -7,6 +7,7 @@ import logging
 import asyncio
 from pathlib import Path
 from contextlib import asynccontextmanager
+from routes.ramp_webhook import router as ramp_webhook_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -266,6 +267,7 @@ api_router.include_router(chat_router)
 
 # Include the main router
 app.include_router(api_router)
+app.include_router(ramp_webhook_router)
 
 # CORS middleware
 app.add_middleware(
