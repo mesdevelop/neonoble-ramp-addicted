@@ -3,6 +3,13 @@ import ReactDOM from "react-dom/client";
 import "./index.css";
 import App from "./App";
 
+const router = createBrowserRouter([
+  { path: "/", element: <Home /> },
+  { path: "/dashboard", element: <Dashboard /> }
+]);
+
+<RouterProvider router={router} />
+
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <React.StrictMode>
